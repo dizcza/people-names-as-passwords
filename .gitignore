@@ -1,0 +1,11 @@
+.idea/
+gender/
+ignored/
+wordlists/
+masks*
+bash/*
+!bash/*.sh
+*.pyc
+*.o
+*.swp
+*.txt
