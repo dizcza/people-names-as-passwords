@@ -19,7 +19,7 @@ REPLACE_CHAR = '|'
 
 ROOT_DIR = Path(__file__).absolute().parent.parent
 GENDER_DIR = ROOT_DIR / "gender"
-MASKS_DIR = ROOT_DIR / "masks" / "py"
+MASKS_DIR = ROOT_DIR / "masks"
 
 NAMES_ASCII_PATH = GENDER_DIR / "names" / "ascii.valid"
 WORDLIST_PATH = ROOT_DIR / "wordlists" / "Top304Thousand-probable-v2.txt"
@@ -127,39 +127,6 @@ def create_masks_tries(wordlist=WORDLIST_PATH, patterns=NAMES_ASCII_PATH):
             tries.traverse(fmasks, line.rstrip('\n'))
 
     write_stats(tries.stats)
-
-
-def create_masks_brute_force(wordlist=WORDLIST_PATH, patterns=NAMES_ASCII_PATH):
-    n_words = count_wordlist(wordlist)
-
-    # fileA lowercase
-    names = Path(patterns).read_text().splitlines()
-
-    stats = defaultdict(int)
-    masks_length = []
-    masks_single = []
-    with codecs.open(wordlist, 'r', encoding='utf-8', errors='ignore') as infile:
-        for line in tqdm(infile, total=n_words, desc="Creating masks"):
-            if REPLACE_CHAR in line:
-                # skip lines with REPLACE_CHAR
-                continue
-            line_lower = line.lower()
-            for name in names:
-                i = line_lower.find(name)
-                if i != -1:
-                    stats[name] += 1
-                    ml = f"{line[:i]}{REPLACE_CHAR * len(name)}{line[i + len(name):]}"
-                    ms = f"{line[:i]}{REPLACE_CHAR}{line[i + len(name):]}"
-                    masks_length.append(ml)
-                    masks_single.append(ms)
-
-    MASKS_DIR.mkdir(exist_ok=True, parents=True)
-    write_stats(stats)
-
-    with open(MASKS_LENGTH, 'w') as f:
-        f.writelines(masks_length)
-    with open(MASKS_SINGLE, 'w') as f:
-        f.writelines(masks_single)
 
 
 if __name__ == '__main__':

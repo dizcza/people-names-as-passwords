@@ -18,10 +18,11 @@ fi
 # bash bash/strip_wordlist.sh wordlists/Top304Thousand-probable-v2.txt
 
 # compile the program
-gcc -O1 -o create_masks.o src/create_masks.c
+#gcc -O1 -o create_masks.o src/create_masks.c
 
 echo "Creating raw masks..."
-./create_masks.o gender/names/ascii.valid.1000 wordlists/Top304Thousand-probable-v2.txt
+#./create_masks.o gender/names/ascii.valid.1000 wordlists/Top304Thousand-probable-v2.txt
+python src/create_masks.py gender/names/ascii.valid wordlists/Top304Thousand-probable-v2.txt
 
 # postprocessing; create hashcat masks
 bash bash/masks_statistics.sh

@@ -55,8 +55,7 @@ eainr7s0o1lt3542986ducmhgbkpyvfwAzEjIRSNCDxOBTLGHqMFKPUYWJVZXQ-'.!$@+_?#/=:)("~&
 
 The last ASCII symbol is `|`, meaning it's least used in password candidates. The probability of encountering `|` in a wordlist is `0.008 %`. Therefore, we can use this symbol as a mask after we strip all lines from the wordlist that contain `|`, which results in preserving approx. `99.9 %` of words.
 
-There are three [implementations](src/) to parse a large wordlist file and collect masked matches. `C` version is, of course, the fastest (let me know if it can be improved).
-
+The [implementation](src/create_masks.py) employs an efficient and simple data structure - a trie (a prefix tree) - that has proven to yield the lowest algorithmic complexity of searching substrings in a text when the look-up name strings are drawn from a small alphabet (in our case it's 26 English lowercase characters). The search is case insensitive.
 
 ### Size: 'wpa' and 'all'
 
