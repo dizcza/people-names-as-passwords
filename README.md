@@ -26,10 +26,9 @@ $ head -n10 masks/wpa/length/masks.stats
 
 Here is how you read the output:
 * a plain name of exactly 8 characters appeared 4629 times;
-* a name of length 7 with suffix `1` appeared 2005 times;
-* ...
+* a name of length 7 with suffix `1` appeared 2005 times ...
 
-The `run.sh` script needs to be run only once.
+The `run.sh` script needs to be run only once. Hashcat masks (not shown here) will be stored in `masks/**/length/masks.hashcat`.
 
 During the postprocessing, only top 1000 masks are retrieved from `masks.raw`. You can easily change this option in [masks_statistics.sh](bash/masks_statistics.sh).
 
@@ -82,18 +81,37 @@ masked rules are created for each match. That is, `12vika1992` creates 3 masks, 
 
 Masks in `masks.hashcat` files are sorted by the num. of occurrences, taken from `masks.stats`.
 
-#### Single Mode
+#### Single Char Mode
 
 In the single mode, each match group is replaced with a single symbol `|`:
 
 * `12vika1992 --> 12|1992`
 * `Gunter@! --> |@!`
 
-While not suited directly for hashcat masks, the placeholder `|` serves  for direct substitution of names of arbitrary length (see next chapter).
+While not suited directly for hashcat masks, the placeholder `|` serves  for direct substitution of names of arbitrary length (see next chapter). Examples from Top29M wordlist:
+
+```
+$ head -n10 masks/wpa/single/masks.stats
+    836 iloveyou|
+    834 |123456789
+    725 princess|
+    676 michael|
+    667 |johnson
+    660 |williams
+    650 |1234567
+    616 jessica|
+    614 |michael
+    609 |12345678
+```
+
+Here is how you read single char mode output:
+
+* a name of any length was added to `iloveyou` 836 times;
+* a name of any length was a prefix of `123456789` 834 times ...
 
 
 ## "Smart" masks
 
-Brute forcing all lower cases in `12l?l?l?l?1992` x 1000 to look for name patterns might not be a good idea. A smarter way is to substitute each `|` in a _single_ mode and each group of `|` x N in _length_ mode by a corresponding name from a chosen country. Doing so will dramatically decrease the search space.
+Brute forcing all lower cases in `12l?l?l?l?1992` x 1000 to look for name patterns might be not the best idea. A smarter way is to substitute each `|` in a _single_ mode and each group of `|` x N in _length_ mode by a corresponding name from a chosen country. Doing so will dramatically decrease the search space.
 
 (to be continued)

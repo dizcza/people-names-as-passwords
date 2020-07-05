@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <assert.h>
 
 #define   MAX_LINE_LENGTH    512 // Max record size
 #define   REPLACE_CHAR  ('|')
@@ -26,6 +27,8 @@ int32_t   names_num=0;
 char line_lower[MAX_LINE_LENGTH];  // temp buffer, allocated once
 char line_mask[MAX_LINE_LENGTH];
 
+int32_t first_line_of_length[MAX_LINE_LENGTH];
+
 FILE *output_file;
 
 int8_t save_names_end_positions() {
@@ -38,13 +41,33 @@ int8_t save_names_end_positions() {
     if (names_end == NULL)
         return 1;
 
-    int32_t lid = 0;
+    int32_t lid = 0, start=0, size=0, size_between, size_upper=MAX_LINE_LENGTH;
     for (char_id = 0; char_id < names_buf_size; char_id++) {
         if (names[char_id] == '\n') {
-            names_end[lid++] = char_id;
+            names_end[lid] = char_id;
             names[char_id] = '\0';
+            size = char_id - start;
+            if (size < size_upper) {    
+                for (size_between=size; size_between<size_upper; size_between++) {
+                    first_line_of_length[size_between] = lid;
+                }
+                size_upper = size;
+            }
+            lid++;
+            start = char_id + 1;
         }
     }
+    for (size_between=0; size_between<size; size_between++) {
+        first_line_of_length[size_between] = first_line_of_length[size];
+    }
+
+    if (DEBUG) {
+        printf("first_line_of_length[]:\n");
+        for (char_id = 0; char_id < MAX_LINE_LENGTH; char_id++) {
+            printf("%d ", first_line_of_length[char_id]);
+        }
+    }
+    
     return 0;
 }
 
@@ -86,36 +109,36 @@ int8_t read_names(char *path)
 
 
 int8_t process_line(char *line) {
-    size_t size = strlen(line);
-    int32_t start_match;
-    int32_t replace_id;
-    int32_t size_name;
+    const size_t size = strlen(line);
+    int32_t start_match, i, size_name;
     int32_t start=0, end=1;
-    char *p_mask;
+    char *p_mask, *p;
 
     size_t lid;
 
     // lowercase the string
-    memmove(line_lower, line, size);
-    line_lower[size] = '\0';
-
-    char *p = line_lower;
-    for ( ; *p; ++p) {
-        if (*p == REPLACE_CHAR) {
-            // don't process a line with the REPLACE_CHAR
+    for (i=0; i<size; i++) {
+        if (line[i] == REPLACE_CHAR) {
+            // don't process a line with REPLACE_CHAR
             return 0;
         }
-        *p = tolower(*p);
+        line_lower[i] = tolower(line[i]);
     }
+    line_lower[size] = '\0';
 
     if (DEBUG)
         printf("Scanning %s", line);
 
-    start = 0;
-    for (lid = 0; lid < names_num; lid++) {
+    const int32_t first_line = first_line_of_length[size];
+    if (first_line > 0) {
+        start = names_end[first_line-1] + 1;
+    } else {
+        start = 0;
+    }
+    for (lid = first_line; lid < names_num; lid++) {
         // find the location 'p' of a substring 'name'
         // on the interval between names + start and names + start + end
-        end = names_end[lid];
+        end = names_end[lid];  // '\0' character
         if (DEBUG) {
             printf("\t\tchecking name %s", (char*)(names + start));
         }
@@ -129,8 +152,8 @@ int8_t process_line(char *line) {
             }
             size_name = end - start;
             p_mask = (char*) (line_mask + start_match);
-            for (replace_id = 0; replace_id < size_name; replace_id++) {
-                p_mask[replace_id] = REPLACE_CHAR;
+            for (i = 0; i < size_name; i++) {
+                p_mask[i] = REPLACE_CHAR;
             }
             //printf("%s", line_mask);
             fputs(line_mask, output_file);
