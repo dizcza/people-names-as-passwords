@@ -1,9 +1,7 @@
 import argparse
 import codecs
 import math
-import re
 import string
-import subprocess
 from collections import defaultdict
 from pathlib import Path
 
@@ -18,14 +16,9 @@ except ImportError:
 REPLACE_CHAR = '|'
 
 ROOT_DIR = Path(__file__).absolute().parent.parent
-GENDER_DIR = ROOT_DIR / "gender"
 MASKS_DIR = ROOT_DIR / "masks"
 
-NAMES_ASCII_PATH = GENDER_DIR / "names" / "ascii.valid"
-WORDLIST_PATH = ROOT_DIR / "wordlists" / "Top304Thousand-probable-v2.txt"
-
 MASKS_LENGTH = MASKS_DIR / "masks.length"
-MASKS_SINGLE = MASKS_DIR / "masks.single"
 STATS_FILE = MASKS_DIR / "most_used_names.txt"
 
 
@@ -67,7 +60,7 @@ class Tries:
 
         char = key[pos].lower()
         next_node = node.next.get(char)
-        self._traverse(file, node=next_node, key=key, d=d+1, start=start)
+        self._traverse(file, node=next_node, key=key, d=d + 1, start=start)
 
     def put(self, key: str):
         self.root = self._put(node=self.root, key=key, d=0)
@@ -82,19 +75,8 @@ class Tries:
         assert char in string.ascii_lowercase, char
         if char not in node.next:
             node.next[char] = Node()
-        node.next[char] = self._put(node.next[char], key=key, d=d+1)
+        node.next[char] = self._put(node.next[char], key=key, d=d + 1)
         return node
-
-
-def count_wordlist(wordlist):
-    wordlist = str(wordlist)
-    completed = subprocess.run(['wc', '-l', wordlist], capture_output=True, text=True)
-    out = completed.stdout.rstrip('\n')
-    counter = None
-    if re.fullmatch(f"\d+ {wordlist}", out):
-        counter, path = out.split(' ')
-        counter = int(counter)
-    return counter
 
 
 def write_stats(stats: dict):
@@ -106,10 +88,7 @@ def write_stats(stats: dict):
             f.write(f"{counts:{tab_counts}d} {name}\n")
 
 
-
-def create_masks_tries(wordlist=WORDLIST_PATH, patterns=NAMES_ASCII_PATH):
-    n_words = count_wordlist(wordlist)
-
+def create_masks_tries(wordlist, patterns):
     # build Tries with names
     tries = Tries()
     names = Path(patterns).read_text().splitlines()
@@ -118,9 +97,10 @@ def create_masks_tries(wordlist=WORDLIST_PATH, patterns=NAMES_ASCII_PATH):
 
     MASKS_DIR.mkdir(exist_ok=True, parents=True)
 
-    with codecs.open(wordlist, 'r', encoding='utf-8', errors='ignore') as infile, \
+    with codecs.open(wordlist, 'r', encoding='utf-8',
+                     errors='ignore') as infile, \
             open(MASKS_LENGTH, 'w') as fmasks:
-        for line in tqdm(infile, total=n_words, desc="Creating masks"):
+        for line in tqdm(infile, desc="Creating masks"):
             if REPLACE_CHAR in line:
                 # skip lines with REPLACE_CHAR
                 continue
@@ -130,8 +110,11 @@ def create_masks_tries(wordlist=WORDLIST_PATH, patterns=NAMES_ASCII_PATH):
 
 
 if __name__ == '__main__':
-    # create_masks_tries(wordlist=WORDLIST_PATH, patterns=NAMES_ASCII_PATH)
-    parser = argparse.ArgumentParser(description="Create masks, given a wordlist and a pattern list.")
+    # names_ascii = ROOT_DIR / "gender" / "names" / "ascii.valid"
+    # wordlist = ROOT_DIR / "wordlists" / "Top304Thousand-probable-v2.txt"
+    # create_masks_tries(wordlist=wordlist, patterns=names_ascii)
+    parser = argparse.ArgumentParser(
+        description="Create masks, given a wordlist and a pattern list.")
     parser.add_argument("pattern", help="path to people names")
     parser.add_argument("wordlist", help="wordlist path")
     args = parser.parse_args()
