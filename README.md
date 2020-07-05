@@ -30,7 +30,12 @@ Here is how you read the output:
 
 The `run.sh` script needs to be run only once. Hashcat masks (not shown here) will be stored in `masks/**/length/masks.hashcat`.
 
-During the postprocessing, only top 1000 masks are retrieved from `masks.raw`. You can easily change this option in [masks_statistics.sh](bash/masks_statistics.sh).
+#### Limitations:
+
+* \[pre-processing\] all original words containing symbol `|` are excluded from a wordlist;
+* \[pre-processing\] only names of at least 4 characters long are considered (you can change this option in [load_valid_names.sh](bash/load_valid_names.sh));
+* \[post-processing\] only top 1000 masks are retrieved from `masks.raw` (you can change this option in [masks_statistics.sh](bash/masks_statistics.sh)).
+
 
 ## In Depth
 
@@ -48,7 +53,7 @@ The first names are parsed into ASCII equivalent words and stored in `gender/nam
 eainr7s0o1lt3542986ducmhgbkpyvfwAzEjIRSNCDxOBTLGHqMFKPUYWJVZXQ-'.!$@+_?#/=:)("~&,%{*`\^}>;[<]|
 ```
 
-The last ASCII symbol is `|`, meaning it's least used in password candidates. The probability of encountering `|` in a wordlist is `8e-3 %`. Therefore, we can use this symbol as a mask after we strip all lines from the wordlist that contain `|`, which results in preserving approx. `99.992 %` of words.
+The last ASCII symbol is `|`, meaning it's least used in password candidates. The probability of encountering `|` in a wordlist is `0.008 %`. Therefore, we can use this symbol as a mask after we strip all lines from the wordlist that contain `|`, which results in preserving approx. `99.9 %` of words.
 
 There are three [implementations](src/) to parse a large wordlist file and collect masked matches. `C` version is, of course, the fastest (let me know if it can be improved).
 

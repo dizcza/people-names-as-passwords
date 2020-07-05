@@ -5,6 +5,9 @@ TOP_MASKS=100
 CURR_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 MASKS_DIR="$(dirname ${CURR_DIR})/masks"
 
+sort -nr ${MASKS_DIR}/most_used_names.txt > ${MASKS_DIR}/most_used_names.sorted
+rm ${MASKS_DIR}/most_used_names.txt
+
 echo "Masks statistics:"
 for size in "all" "wpa"; do
     for mode in "length" "single"; do

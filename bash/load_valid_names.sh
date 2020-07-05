@@ -1,6 +1,8 @@
 #!/bin/bash
 # apt install konwert dos2unix
 
+MIN_NAME_LENGTH=4
+
 CURR_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 GENDER_DIR="$(dirname ${CURR_DIR})/gender"
 NAMES_DIR=${GENDER_DIR}/names
@@ -53,7 +55,7 @@ sed "s/.*/s\/&\/\/g/" delims > delims.sed
 sed -f delims.sed names-utf8.junk > names-utf8.junk.valid
 
 # valid UTF-8 people names with at least 4 characters
-cat names-utf8.* | sort -u | awk '{ if (length($0) > 3) print }' > ${NAMES_DIR}/utf8
+cat names-utf8.* | sort -u | awk "{ if (length >= ${MIN_NAME_LENGTH}) print }" > ${NAMES_DIR}/utf8
 
 # the best resort to convert general utf-8 to ascii
 konwert utf8-ascii ${NAMES_DIR}/utf8 >> names-ascii.junk.tmp
@@ -64,7 +66,7 @@ sort -u names-ascii.junk.tmp > names-ascii.junk
 dos2unix -q names-ascii.junk
 
 # strip non-alphabetic names due to the conversion failure
-sed -E "/[^a-zA-Z]/d" names-ascii.junk | awk '{ if (length($0) > 3) print }' | tr A-Z a-z | sort -u > names-ascii.valid.unsorted
+sed -E "/[^a-zA-Z]/d" names-ascii.junk | awk "{ if (length >= ${MIN_NAME_LENGTH}) print }" | tr A-Z a-z | sort -u > names-ascii.valid.unsorted
 
 # sort by length in descending order
 awk '{ print length, $0 }' names-ascii.valid.unsorted | sort -nr | cut -d" " -f2- > ${NAMES_DIR}/ascii.valid

@@ -23,6 +23,7 @@ char     *names;
 int32_t   names_buf_size;
 int32_t  *names_end;
 int32_t   names_num=0;
+int32_t  *matches;
 
 char line_lower[MAX_LINE_LENGTH];  // temp buffer, allocated once
 char line_mask[MAX_LINE_LENGTH];
@@ -37,6 +38,7 @@ int8_t save_names_end_positions() {
         names_num += names[char_id] == '\n';
     }
     names_end = (int32_t*)calloc(names_num, sizeof(int32_t));
+    matches = (int32_t*)calloc(names_num, sizeof(int32_t));
 
     if (names_end == NULL)
         return 1;
@@ -144,6 +146,8 @@ int8_t process_line(char *line) {
         }
         p = strstr(line_lower, (char*) (names + start));
         if (p != NULL) {
+            matches[lid]++;
+
             memmove(line_mask, line, size);
             line_mask[size] = '\0';
             start_match = (int32_t)(p - line_lower);
@@ -214,6 +218,28 @@ int8_t read_wordlist(char *wordlist_path) {
 }
 
 
+int8_t write_statistics() {
+    FILE* matches_file = fopen("masks/most_used_names.txt", "w");
+    if (matches_file== NULL) {
+        return 1;
+    }
+
+    int32_t lid, start=0;
+    char buffer_info[2*MAX_LINE_LENGTH];
+    for (lid=0; lid<names_num; lid++) {
+        if (matches[lid]) {
+            sprintf(buffer_info, "%d %s", matches[lid], (char*)(names + start));
+            fputs(buffer_info, matches_file);
+            fputc('\n', matches_file);
+        }
+        start = names_end[lid] + 1;
+    }
+
+    fclose(matches_file);
+    return 0;
+}
+
+
 int main(int argc, char* argv[]) {
     // usage: ./create_masks.o /path/to/names /path/to/wordlist
 
@@ -236,9 +262,14 @@ int main(int argc, char* argv[]) {
         return status_code;
     }
 
+    if (write_statistics() != 0) {
+        fprintf(stderr, "Couldn't write statistics in 'masks/most_used_names.txt'\n");
+    }
+   
     /* free the used memory */
     free(names);
     free(names_end);
+    free(matches);
 
     return 0;
 }
