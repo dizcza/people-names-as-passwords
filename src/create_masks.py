@@ -1,8 +1,6 @@
 import argparse
 import codecs
 import math
-import string
-from collections import defaultdict
 from pathlib import Path
 
 try:
@@ -18,68 +16,82 @@ REPLACE_CHAR = '|'
 ROOT_DIR = Path(__file__).absolute().parent.parent
 MASKS_DIR = ROOT_DIR / "masks"
 
-MASKS_LENGTH = MASKS_DIR / "masks.length"
+MASKS_LENGTH = MASKS_DIR / "masks.raw"
 STATS_FILE = MASKS_DIR / "most_used_names.txt"
 
 
 class Node:
     def __init__(self):
-        self.is_end = None
-        self.next = {}
+        self.is_leaf = False  # word end
+        self.children = {}  # links to next Nodes down the tree
+        self.count = 0  # how many lines matched the pattern
 
     def __repr__(self):
         return f"{self.__class__.__name__}(" \
-               f"is_end={self.is_end}, " \
-               f"next={''.join(sorted(self.next.keys()))})"
+               f"is_leaf={self.is_leaf}, " \
+               f"next={sorted(self.children.keys())})"
 
 
-class Tries:
+class Trie:
+    """
+    A prefix tree with ASCII character nodes.
+    """
 
     def __init__(self):
         self.root = Node()
-        self.stats = defaultdict(int)
 
-    def traverse(self, file, key: str):
-        for start, char in enumerate(key):
-            self._traverse(file, node=self.root, key=key, d=0, start=start)
-
-    def _traverse(self, file, node: Node, key: str, d: int, start: int):
+    def collect_statistics(self, node=None, stats={}, prefix=''):
+        """
+        :param node: a Node (root Node as the start)
+        :param stats: accumulated statistics of prefix match counts
+        :param prefix: the prefix (person name)
+        :return: stats
+        """
         if node is None:
-            return
-        pos = d + start
+            node = self.root
+        if node.is_leaf and node.count > 0:
+            assert prefix not in stats, prefix
+            stats[prefix] = node.count
+        for key, child in node.children.items():
+            self.collect_statistics(child, stats=stats, prefix=f"{prefix}{key}")
+        return stats
 
-        if node.is_end:
-            match = key[start: pos].lower()
-            self.stats[match] += 1
-            ml = f"{key[:start]}{REPLACE_CHAR * len(match)}{key[start + len(match):]}\n"
-            file.write(ml)
-
-        if pos == len(key):
-            # traversed all way down
-            return
-
-        char = key[pos].lower()
-        next_node = node.next.get(char)
-        self._traverse(file, node=next_node, key=key, d=d + 1, start=start)
+    def find_matches(self, file, key: str):
+        """
+        :param file: output file to write masks
+        :param key: a line to search for patterns and create the masks from
+        """
+        key_lower = key.lower()
+        L = len(key)
+        for start in range(L):
+            node = self.root
+            for index in range(start, L + 1):
+                if node is None:
+                    break
+                if node.is_leaf:
+                    node.count += 1
+                    len_match = index - start
+                    mask = f"{key[:start]}{REPLACE_CHAR * len_match}{key[index:]}\n"
+                    file.write(mask)
+                if index == L:
+                    break
+                char = key_lower[index]
+                node = node.children.get(char)
 
     def put(self, key: str):
-        self.root = self._put(node=self.root, key=key, d=0)
-
-    def _put(self, node: Node, key: str, d: int):
-        if node is None:
-            node = Node()
-        if d == len(key):
-            node.is_end = True
-            return node
-        char = key[d]
-        assert char in string.ascii_lowercase, char
-        if char not in node.next:
-            node.next[char] = Node()
-        node.next[char] = self._put(node.next[char], key=key, d=d + 1)
-        return node
+        """
+        :param key: a person name to insert in the current trie
+        """
+        node = self.root
+        for index, char in enumerate(key):
+            if char not in node.children:
+                node.children[char] = Node()
+            node = node.children[char]
+        node.is_leaf = True
 
 
 def write_stats(stats: dict):
+    # writes the statistics of the most used people names as passwords
     tab_counts = math.ceil(math.log10(max(stats.values())))
     stats_sorted = sorted(stats.items(), key=lambda x: x[1], reverse=True)
     STATS_FILE.parent.mkdir(exist_ok=True, parents=True)
@@ -89,11 +101,11 @@ def write_stats(stats: dict):
 
 
 def create_masks_tries(wordlist, patterns):
-    # build Tries with names
-    tries = Tries()
+    # build a trie with names
+    trie = Trie()
     names = Path(patterns).read_text().splitlines()
     for name in names:
-        tries.put(name)
+        trie.put(name)
 
     MASKS_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -104,9 +116,10 @@ def create_masks_tries(wordlist, patterns):
             if REPLACE_CHAR in line:
                 # skip lines with REPLACE_CHAR
                 continue
-            tries.traverse(fmasks, line.rstrip('\n'))
+            trie.find_matches(fmasks, line.rstrip('\n'))
 
-    write_stats(tries.stats)
+    stats = trie.collect_statistics()
+    write_stats(stats)
 
 
 if __name__ == '__main__':
