@@ -1,80 +1,91 @@
 /*
+ * Find people names in a wordlist and replace matches with a mask REPLACE_CHAR.
+ * Brute force algorithm:
+ * 
+ * for each line in wordlist do
+ *   for each person_name in people_names_list do
+ *     if person_name is in the line
+ *       replace person_name with a mask
+ *       append the masked line into a file
+ *   done
+ * done
+ *
+ * A trie is used to avoid the brute force.
+ *
    Danylo Ulianych
    Jul 1, 2020
    */
 
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <ctype.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <assert.h>
 
-#define   MAX_LINE_LENGTH    512 // Max record size
-#define   REPLACE_CHAR  ('|')
-#define   DEBUG 0
-#define   PROGRESS_EACH 10000
+#define   MAX_LINE_LENGTH    512   // Max record size
+#define   REPLACE_CHAR       '|'
+#define   PROGRESS_EACH      100000
+#define   ALPHABET_SIZE      26    // 26 English lowercase letters
 
-char     *names;
-int32_t   names_buf_size;
-int32_t  *names_end;
-int32_t   names_num=0;
-int32_t  *matches;
-
-char line_lower[MAX_LINE_LENGTH];  // temp buffer, allocated once
 char line_mask[MAX_LINE_LENGTH];
+char line_lower[MAX_LINE_LENGTH];
+char buffer_info[2*MAX_LINE_LENGTH];
 
-int32_t first_line_of_length[MAX_LINE_LENGTH];
-
-FILE *output_file;
-
-int8_t save_names_end_positions() {
-    int32_t char_id;
-    for (char_id = 0; char_id < names_buf_size; char_id++) {
-        names_num += names[char_id] == '\n';
+typedef struct TrieNode TrieNode;
+ 
+struct TrieNode {
+    // The Trie Node Structure
+    // Each node has N children, starting from the root
+    // and a flag to check if it's a leaf node
+    int8_t is_leaf;
+    TrieNode* children[ALPHABET_SIZE];
+    uint64_t count;  // to allow running on >4B wordlists
+};
+ 
+TrieNode* make_trienode() {
+    // Allocate memory for a TrieNode
+    TrieNode* node = (TrieNode*) calloc (1, sizeof(TrieNode));
+    int32_t i;
+    for (i=0; i<ALPHABET_SIZE; i++)
+        node->children[i] = NULL;
+    node->is_leaf = 0;
+    node->count = 0U;
+    return node;
+}
+ 
+void free_trienode(TrieNode* node) {
+    // Free the trienode sequence
+    int32_t i;
+    for(i=0; i<ALPHABET_SIZE; i++) {
+        if (node->children[i] != NULL) {
+            free_trienode(node->children[i]);
+        } 
     }
-    names_end = (int32_t*)calloc(names_num, sizeof(int32_t));
-    matches = (int32_t*)calloc(names_num, sizeof(int32_t));
-
-    if (names_end == NULL)
-        return 1;
-
-    int32_t lid = 0, start=0, size=0, size_between, size_upper=MAX_LINE_LENGTH;
-    for (char_id = 0; char_id < names_buf_size; char_id++) {
-        if (names[char_id] == '\n') {
-            names_end[lid] = char_id;
-            names[char_id] = '\0';
-            size = char_id - start;
-            if (size < size_upper) {    
-                for (size_between=size; size_between<size_upper; size_between++) {
-                    first_line_of_length[size_between] = lid;
-                }
-                size_upper = size;
-            }
-            lid++;
-            start = char_id + 1;
-        }
-    }
-    for (size_between=0; size_between<size; size_between++) {
-        first_line_of_length[size_between] = first_line_of_length[size];
-    }
-
-    if (DEBUG) {
-        printf("first_line_of_length[]:\n");
-        for (char_id = 0; char_id < MAX_LINE_LENGTH; char_id++) {
-            printf("%d ", first_line_of_length[char_id]);
-        }
-    }
-    
-    return 0;
+    free(node);
 }
 
 
-int8_t read_names(char *path)
+void build_trie(TrieNode *root, const char *names_buf, const int32_t buf_size) {
+    int32_t i, node_id;
+    TrieNode *node = root;
+    for (i=0; i<buf_size; i++) {
+        if (names_buf[i] == '\n') {
+            node->is_leaf = 1;
+            // reset
+            node = root;
+        } else {
+            node_id = (int32_t) names_buf[i] - 'a';
+            if (node->children[node_id] == NULL) {
+                node->children[node_id] = make_trienode();
+            }
+            node = node->children[node_id];
+        }
+    }
+}
+
+
+int8_t build_trie_from_path(TrieNode *root, const char *path)
 {
     /* declare a file pointer */
     FILE    *names_file;
@@ -88,7 +99,7 @@ int8_t read_names(char *path)
 
     /* Get the number of bytes */
     fseek(names_file, 0L, SEEK_END);
-    names_buf_size = ftell(names_file);
+    const int32_t names_buf_size = ftell(names_file);
 
     /* reset the file position indicator to 
        the beginning of the file */
@@ -96,87 +107,74 @@ int8_t read_names(char *path)
 
     /* grab sufficient memory for the 
        names to hold the text */
-    names = (char*)calloc(names_buf_size, sizeof(char));	
+    char *names = (char*)calloc(names_buf_size, sizeof(char));	
 
     /* memory error */
     if(names == NULL)
         return 1;
 
     /* copy all the text into the names */
-    fread(names, sizeof(char), names_buf_size, names_file);
+    size_t bytes_read;
+    bytes_read = fread(names, sizeof(char), names_buf_size, names_file);
+    if (bytes_read != names_buf_size) {
+        return 1;
+    }
+
     fclose(names_file);
 
+    // build a trie
+    build_trie(root, names, names_buf_size);
+    
+    free(names);
+
     return 0;
 }
 
 
-int8_t process_line(char *line) {
-    const size_t size = strlen(line);
-    int32_t start_match, i, size_name;
-    int32_t start=0, end=1;
-    char *p_mask, *p;
-
-    size_t lid;
-
-    // lowercase the string
-    for (i=0; i<size; i++) {
-        if (line[i] == REPLACE_CHAR) {
-            // don't process a line with REPLACE_CHAR
-            return 0;
-        }
+void write_matches(TrieNode *root, FILE *output_file, const char *line) {
+    const size_t L = strlen(line);
+    int32_t i;
+    for (i=0; i<L; i++) {
         line_lower[i] = tolower(line[i]);
     }
-    line_lower[size] = '\0';
+    line_mask[L] = '\0';
 
-    if (DEBUG)
-        printf("Scanning %s", line);
-
-    const int32_t first_line = first_line_of_length[size];
-    if (first_line > 0) {
-        start = names_end[first_line-1] + 1;
-    } else {
-        start = 0;
-    }
-    for (lid = first_line; lid < names_num; lid++) {
-        // find the location 'p' of a substring 'name'
-        // on the interval between names + start and names + start + end
-        end = names_end[lid];  // '\0' character
-        if (DEBUG) {
-            printf("\t\tchecking name %s", (char*)(names + start));
-        }
-        p = strstr(line_lower, (char*) (names + start));
-        if (p != NULL) {
-            matches[lid]++;
-
-            memmove(line_mask, line, size);
-            line_mask[size] = '\0';
-            start_match = (int32_t)(p - line_lower);
-            if (DEBUG) {
-                printf("\tMatch '%s' at pos=%d in %s", names+start, start_match, line);
+    TrieNode *node;
+    int32_t start, index, char_id;
+    for (start=0; start<L; start++) {
+        node = root;
+        for (index=start; index<L+1; index++) {
+            if (node == NULL) {
+                break;
             }
-            size_name = end - start;
-            p_mask = (char*) (line_mask + start_match);
-            for (i = 0; i < size_name; i++) {
-                p_mask[i] = REPLACE_CHAR;
+            if (node->is_leaf) {
+                node->count++;
+                memmove(line_mask, line, L);
+                for (i=start; i<index; i++) {
+                    line_mask[i] = REPLACE_CHAR;
+                }
+                //fputs(line, output_file);
+                fputs(line_mask, output_file);
             }
-            //printf("%s", line_mask);
-            fputs(line_mask, output_file);
+            if (index == L) {
+                break;
+            }
+            char_id = (int32_t) line_lower[index] - 'a';
+            if (char_id < 0 || char_id >= ALPHABET_SIZE) {
+                // unknown character
+                break;
+            }
+            node = node->children[char_id];
         }
-        start = end + 1;
-
-
     }
-
-    return 0;
 }
 
 
-int8_t read_wordlist(char *wordlist_path) {
+int8_t write_matches_from_wordlist(TrieNode *root, char *wordlist_path) { 
     FILE* wordlist_file = fopen(wordlist_path, "r");
     if (wordlist_file == NULL) {
         return 1;
     }
-    char line[MAX_LINE_LENGTH];
 
     struct stat st = {0};
     if (stat("masks", &st) == -1) {
@@ -187,17 +185,18 @@ int8_t read_wordlist(char *wordlist_path) {
         }
     }
 
-    output_file = fopen("masks/masks.raw", "w");
+    FILE *output_file = fopen("masks/masks.raw", "w");
     if (output_file == NULL) {
         printf("Couldn't open the output file for writing. Exiting\n");
         return 1;
     }
 
+    char line[MAX_LINE_LENGTH];
     int64_t count = 0;
     while (fgets(line, sizeof(line), wordlist_file)) {
         /* note that fgets don't strip the terminating \n, checking its
            presence would allow to handle lines longer that sizeof(line) */
-        process_line(line);
+        write_matches(root, output_file, line);
         if (++count % PROGRESS_EACH == 0) {
             printf("\rProcessed %ld lines", count);
             fflush(stdout);
@@ -218,58 +217,60 @@ int8_t read_wordlist(char *wordlist_path) {
 }
 
 
-int8_t write_statistics() {
-    FILE* matches_file = fopen("masks/most_used_names.txt", "w");
-    if (matches_file== NULL) {
-        return 1;
+void write_statistics(const TrieNode *node, FILE *matches_file, char *prefix, const int32_t prefix_len) {
+    if (node == NULL) {
+        return;
     }
-
-    int32_t lid, start=0;
-    char buffer_info[2*MAX_LINE_LENGTH];
-    for (lid=0; lid<names_num; lid++) {
-        if (matches[lid]) {
-            sprintf(buffer_info, "%d %s", matches[lid], (char*)(names + start));
-            fputs(buffer_info, matches_file);
-            fputc('\n', matches_file);
+    if (node->is_leaf && node->count > 0) {
+        prefix[prefix_len] = '\0';
+        sprintf(buffer_info, "%lu %s\n", node->count, prefix);
+        fputs(buffer_info, matches_file);
+    }
+    int32_t node_id;
+    TrieNode *child;
+    for (node_id=0; node_id < ALPHABET_SIZE; node_id++) {
+        child = node->children[node_id];
+        if (child != NULL) {
+            prefix[prefix_len] = (char) (node_id + 'a');
+            write_statistics(child, matches_file, prefix, prefix_len+1);
         }
-        start = names_end[lid] + 1;
     }
-
-    fclose(matches_file);
-    return 0;
 }
 
 
 int main(int argc, char* argv[]) {
     // usage: ./create_masks.o /path/to/names /path/to/wordlist
 
+    TrieNode* root = make_trienode();
     int8_t status_code;
-    status_code = read_names(argv[1]);
+    status_code = build_trie_from_path(root, argv[1]);
     if (status_code != 0) {
-        printf("Error while reading names file. Exiting\n");
+        printf("Error while reading names file %s\n", argv[1]);
         return status_code;
     }
 
-    status_code = save_names_end_positions();
+    status_code = write_matches_from_wordlist(root, argv[2]);
     if (status_code != 0) {
-        printf("Error while preprocessing names pattern strings. Exiting\n");
+        printf("Error while parsing wordlist file %s\n", argv[2]);
         return status_code;
     }
 
-    status_code = read_wordlist(argv[2]);
-    if (status_code != 0) {
-        printf("Error while reading wordlist file. Exiting\n");
-        return status_code;
-    }
-
-    if (write_statistics() != 0) {
+    // write statistics
+    FILE* matches_file = fopen("masks/most_used_names.txt", "w");
+    if (matches_file == NULL) {
         fprintf(stderr, "Couldn't write statistics in 'masks/most_used_names.txt'\n");
+        return 1;
     }
+    char prefix[MAX_LINE_LENGTH];
+    int32_t i;
+    for (i=0; i<MAX_LINE_LENGTH; i++) {
+        prefix[i] = 0;
+    }
+    write_statistics(root, matches_file, prefix, 0);
+    fclose(matches_file);
    
     /* free the used memory */
-    free(names);
-    free(names_end);
-    free(matches);
+    free_trienode(root);
 
     return 0;
 }

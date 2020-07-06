@@ -1,6 +1,5 @@
 import argparse
 import codecs
-import math
 from pathlib import Path
 
 try:
@@ -50,19 +49,18 @@ class Trie:
         if node is None:
             node = self.root
         if node.is_leaf and node.count > 0:
-            assert prefix not in stats, prefix
             stats[prefix] = node.count
         for key, child in node.children.items():
             self.collect_statistics(child, stats=stats, prefix=f"{prefix}{key}")
         return stats
 
-    def find_matches(self, file, key: str):
+    def write_matches(self, output_file, line: str):
         """
-        :param file: output file to write masks
-        :param key: a line to search for patterns and create the masks from
+        :param output_file: output file to write masks
+        :param line: a line to search for patterns and create the masks from
         """
-        key_lower = key.lower()
-        L = len(key)
+        line_lower = line.lower()
+        L = len(line)
         for start in range(L):
             node = self.root
             for index in range(start, L + 1):
@@ -71,11 +69,11 @@ class Trie:
                 if node.is_leaf:
                     node.count += 1
                     len_match = index - start
-                    mask = f"{key[:start]}{REPLACE_CHAR * len_match}{key[index:]}\n"
-                    file.write(mask)
+                    mask = f"{line[:start]}{REPLACE_CHAR * len_match}{line[index:]}\n"
+                    output_file.write(mask)
                 if index == L:
                     break
-                char = key_lower[index]
+                char = line_lower[index]
                 node = node.children.get(char)
 
     def put(self, key: str):
@@ -88,16 +86,6 @@ class Trie:
                 node.children[char] = Node()
             node = node.children[char]
         node.is_leaf = True
-
-
-def write_stats(stats: dict):
-    # writes the statistics of the most used people names as passwords
-    tab_counts = math.ceil(math.log10(max(stats.values())))
-    stats_sorted = sorted(stats.items(), key=lambda x: x[1], reverse=True)
-    STATS_FILE.parent.mkdir(exist_ok=True, parents=True)
-    with open(STATS_FILE, 'w') as f:
-        for name, counts in stats_sorted:
-            f.write(f"{counts:{tab_counts}d} {name}\n")
 
 
 def create_masks_tries(wordlist, patterns):
@@ -116,10 +104,12 @@ def create_masks_tries(wordlist, patterns):
             if REPLACE_CHAR in line:
                 # skip lines with REPLACE_CHAR
                 continue
-            trie.find_matches(fmasks, line.rstrip('\n'))
+            trie.write_matches(fmasks, line.rstrip('\n'))
 
     stats = trie.collect_statistics()
-    write_stats(stats)
+    with open(STATS_FILE, 'w') as f:
+        for name, counts in stats.items():
+            f.write(f"{counts} {name}\n")
 
 
 if __name__ == '__main__':

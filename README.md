@@ -45,6 +45,26 @@ The `run.sh` script needs to be run only once. Hashcat masks (not shown here) wi
 
 The first names are parsed into ASCII equivalent words and stored in `gender/names` folder (see [load_valid_names.sh](bash/load_valid_names.sh)).
 
+
+### Most used first names
+
+Most used people first names of length 5 and more:
+
+```
+$ awk '{if (length($2) >= 5) print}' masks/most_used_names.sorted | head
+139989 chris
+128067 angel
+104553 ester
+100876 cally
+ 99607 inger
+ 94240 andre
+ 91455 ander
+ 86502 erman
+ 86332 erden
+ 77870 christ
+```
+
+
 ### Creating masks
 
 [OMEN](https://github.com/RUB-SysSec/OMEN) was used to create an alphabet of Top2B passwords:

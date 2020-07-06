@@ -10,7 +10,8 @@ if [ ! -f "wordlists/Top304Thousand-probable-v2.txt" ]; then
 fi
 
 echo "Creating raw masks..."
-python src/create_masks.py gender/names/ascii.valid wordlists/Top304Thousand-probable-v2.txt
+gcc -O1 -o create_masks.o src/create_masks.c
+./create_masks.o gender/names/ascii.valid wordlists/Top304Thousand-probable-v2.txt
 
 # postprocessing; create hashcat masks
 bash bash/masks_statistics.sh
