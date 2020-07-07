@@ -25,16 +25,15 @@ $ head -n10 masks/wpa/length/masks.stats
 (You will see different output, depending on the choice of a wordlist to scan for names.)
 
 Here is how you read the output:
-* a plain name of exactly 8 characters appeared 4629 times;
-* a name of length 7 with suffix `1` appeared 2005 times ...
+* plain names of exactly 8 characters appeared 4629 times;
+* names of length 7 with suffix `1` appeared 2005 times ...
 
 The `run.sh` script needs to be run only once. Hashcat masks (not shown here) will be stored in `masks/**/length/masks.hashcat`.
 
 #### Limitations:
 
-* \[pre-processing\] all original words containing symbol `|` are excluded from a wordlist;
-* \[pre-processing\] only names of at least 4 characters long are considered (you can change this option in [load_valid_names.sh](bash/load_valid_names.sh));
-* \[post-processing\] only top 1000 masks are retrieved from `masks.raw` (you can change this option in [masks_statistics.sh](bash/masks_statistics.sh)).
+* all original words containing symbol `|` are excluded from the wordlist;
+* only names of at least 4 characters long are considered to collect the statistics. You can change this option in [load_valid_names.sh](bash/load_valid_names.sh). Later on, at passwords generation phase, names of all lengths will be generated.
 
 
 ## In Depth
@@ -67,7 +66,7 @@ $ awk '{if (length($2) >= 5) print}' masks/most_used_names.sorted | head
 
 ### Creating masks
 
-[OMEN](https://github.com/RUB-SysSec/OMEN) was used to create an alphabet of Top2B passwords:
+[OMEN](https://github.com/RUB-SysSec/OMEN) was used to create the alphabet of Top2B passwords:
 
 ```
 eainr7s0o1lt3542986ducmhgbkpyvfwAzEjIRSNCDxOBTLGHqMFKPUYWJVZXQ-'.!$@+_?#/=:)("~&,%{*`\^}>;[<]|
@@ -115,27 +114,34 @@ In the single mode, each match group is replaced with a single symbol `|`:
 While not suited directly for hashcat masks, the placeholder `|` serves  for direct substitution of names of arbitrary length (see next chapter). Examples from Top29M wordlist:
 
 ```
-$ head -n10 masks/wpa/single/masks.stats
-    836 iloveyou|
-    834 |123456789
-    725 princess|
-    676 michael|
-    667 |johnson
-    660 |williams
-    650 |1234567
-    616 jessica|
-    614 |michael
-    609 |12345678
+$ head -n10 masks/all/single/masks.stats
+ 242364 |
+  44311 |1
+  33654 |123
+  33307 |s
+  31914 |a
+  29447 |e
+  26605 |2
+  25756 |12
+  23953 |n
+  23168 |3
 ```
 
 Here is how you read single char mode output:
 
-* a name of any length was added to `iloveyou` 836 times;
-* a name of any length was a prefix of `123456789` 834 times ...
+* plain names of any length were used 242364 times as passwords;
+* digit `1` was appended to names of any length 44311 times ...
 
 
-## "Smart" masks
+## Generate probable passwords
 
-Brute forcing all lower cases in `12l?l?l?l?1992` x 1000 to look for name patterns might be not the best idea. A smarter way is to substitute each `|` in a _single_ mode and each group of `|` x N in _length_ mode by a corresponding name from a chosen country. Doing so will dramatically decrease the search space.
+Brute forcing all lower cases in `l?l?l?l?l?l?l?1` x 1000 to look for name patterns might be not the best idea. A smarter way is to substitute each `|` in a _single_ mode and each group of subsequent `|` characters in _length_ mode by a name from a chosen country. Doing so will dramatically decrease the search space.
+
+Examples:
+
+```
+single mode: 12|1992  --> 12jan1992 12alex1992 12simon1992 12martina1992 12michael1992 ...
+length mode: 12||||1992  -->  12alex1992 12lena1992 12lora1992 12vika1992 12sofi1992 ...
+```
 
 (to be continued)

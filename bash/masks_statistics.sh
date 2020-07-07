@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TOP_MASKS=100
+TOP_MASKS=1000
 
 CURR_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 MASKS_DIR="$(dirname ${CURR_DIR})/masks"
@@ -12,6 +12,7 @@ echo "Masks statistics:"
 for size in "all" "wpa"; do
     for mode in "length" "single"; do
         mkdir -p ${MASKS_DIR}/${size}/${mode}/
+        echo "    processing size='${size}', mode='${mode}'"
         if [ "${mode}" == "length" ]; then
             if [ "${size}" == "all" ]; then
                 # length; all
@@ -30,10 +31,9 @@ for size in "all" "wpa"; do
             if [ "${size}" == "all" ]; then
                 # single; all
                 sed -E 's/\|+/|/' ${MASKS_DIR}/masks.raw | sort | uniq -c | sort -nr | head -n ${TOP_MASKS} > ${MASKS_DIR}/${size}/${mode}/masks.stats
-            else
-                # single; wpa
-                sed -E 's/\|+/|/' ${MASKS_DIR}/masks.raw | awk '{ if (length($0) >= 8) print }' | sort | uniq -c | sort -nr | head -n ${TOP_MASKS} > ${MASKS_DIR}/${size}/${mode}/masks.stats
             fi
+
+            # single + wpa does not make sense because a full name is substituted with a char
 
             # in single mode, does not make sense to filter by length - it won't be used directly in hashcat
         fi
