@@ -12,9 +12,9 @@
  *
  * A trie is used to avoid the brute force.
  *
-   Danylo Ulianych
-   Jul 1, 2020
-   */
+ * Danylo Ulianych
+ * Jul 1, 2020
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -33,7 +33,7 @@ char line_lower[MAX_LINE_LENGTH];
 char buffer_info[2*MAX_LINE_LENGTH];
 
 typedef struct TrieNode TrieNode;
- 
+
 struct TrieNode {
     // The Trie Node Structure
     // Each node has N children, starting from the root
@@ -42,7 +42,7 @@ struct TrieNode {
     TrieNode* children[ALPHABET_SIZE];
     uint64_t count;  // to allow running on >4B wordlists
 };
- 
+
 TrieNode* make_trienode() {
     // Allocate memory for a TrieNode
     TrieNode* node = (TrieNode*) calloc (1, sizeof(TrieNode));
@@ -53,7 +53,7 @@ TrieNode* make_trienode() {
     node->count = 0U;
     return node;
 }
- 
+
 void free_trienode(TrieNode* node) {
     // Free the trienode sequence
     int32_t i;
@@ -124,7 +124,7 @@ int8_t build_trie_from_path(TrieNode *root, const char *path)
 
     // build a trie
     build_trie(root, names, names_buf_size);
-    
+
     free(names);
 
     return 0;
@@ -132,6 +132,7 @@ int8_t build_trie_from_path(TrieNode *root, const char *path)
 
 
 void write_matches(TrieNode *root, FILE *output_file, const char *line) {
+    // line ends with a new line
     const size_t L = strlen(line);
     int32_t i;
     for (i=0; i<L; i++) {
@@ -139,22 +140,18 @@ void write_matches(TrieNode *root, FILE *output_file, const char *line) {
     }
     line_mask[L] = '\0';
 
-    TrieNode *node;
-    int32_t start, index, char_id;
+    TrieNode *node, *longest_match_node;
+    int32_t start, index, char_id, longest_index;
     for (start=0; start<L; start++) {
         node = root;
+        longest_match_node = NULL;
         for (index=start; index<L+1; index++) {
             if (node == NULL) {
                 break;
             }
             if (node->is_leaf) {
-                node->count++;
-                memmove(line_mask, line, L);
-                for (i=start; i<index; i++) {
-                    line_mask[i] = REPLACE_CHAR;
-                }
-                //fputs(line, output_file);
-                fputs(line_mask, output_file);
+                longest_index = index;
+                longest_match_node = node;
             }
             if (index == L) {
                 break;
@@ -165,6 +162,15 @@ void write_matches(TrieNode *root, FILE *output_file, const char *line) {
                 break;
             }
             node = node->children[char_id];
+        }
+        if (longest_match_node != NULL) {
+            longest_match_node->count++;
+            memmove(line_mask, line, L);
+            for (i=start; i<longest_index; i++) {
+                line_mask[i] = REPLACE_CHAR;
+            }
+            // line and line_mask already end with '\n'
+            fputs(line_mask, output_file);
         }
     }
 }
@@ -268,7 +274,7 @@ int main(int argc, char* argv[]) {
     }
     write_statistics(root, matches_file, prefix, 0);
     fclose(matches_file);
-   
+
     /* free the used memory */
     free_trienode(root);
 

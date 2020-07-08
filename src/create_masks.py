@@ -63,18 +63,23 @@ class Trie:
         L = len(line)
         for start in range(L):
             node = self.root
+            longest_index = start
+            longest_match_node = None
             for index in range(start, L + 1):
                 if node is None:
                     break
                 if node.is_leaf:
-                    node.count += 1
-                    len_match = index - start
-                    mask = f"{line[:start]}{REPLACE_CHAR * len_match}{line[index:]}\n"
-                    output_file.write(mask)
+                    longest_index = index
+                    longest_match_node = node
                 if index == L:
                     break
                 char = line_lower[index]
                 node = node.children.get(char)
+            if longest_match_node is not None:
+                longest_match_node.count += 1
+                len_match = longest_index - start
+                mask = f"{line[:start]}{REPLACE_CHAR * len_match}{line[longest_index:]}\n"
+                output_file.write(mask)
 
     def put(self, key: str):
         """
