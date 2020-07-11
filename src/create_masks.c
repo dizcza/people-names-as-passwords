@@ -65,7 +65,10 @@ void free_trienode(TrieNode* node) {
     free(node);
 }
 
-
+/**
+ * Build a trie from names buffer.
+ * Names in the names buffer do not need to be sorted by length.
+ */
 void build_trie(TrieNode *root, const char *names_buf, const int32_t buf_size) {
     int32_t i, node_id;
     TrieNode *node = root;
@@ -85,6 +88,9 @@ void build_trie(TrieNode *root, const char *names_buf, const int32_t buf_size) {
 }
 
 
+/**
+ * Read names from 'path' and build a trie.
+ */
 int8_t build_trie_from_path(TrieNode *root, const char *path)
 {
     /* declare a file pointer */
@@ -110,17 +116,21 @@ int8_t build_trie_from_path(TrieNode *root, const char *path)
     char *names = (char*)calloc(names_buf_size, sizeof(char));	
 
     /* memory error */
-    if(names == NULL)
+    if(names == NULL) {
+        fclose(names_file);
         return 1;
+    }
 
     /* copy all the text into the names */
     size_t bytes_read;
     bytes_read = fread(names, sizeof(char), names_buf_size, names_file);
+    
+    fclose(names_file);
+    
     if (bytes_read != names_buf_size) {
+        free(names);
         return 1;
     }
-
-    fclose(names_file);
 
     // build a trie
     build_trie(root, names, names_buf_size);
@@ -130,7 +140,14 @@ int8_t build_trie_from_path(TrieNode *root, const char *path)
     return 0;
 }
 
-
+/**
+ * Find all name substrings in a line, replace matches with REPLACE_CHAR,
+ * and write output masks in a file. The search is case insensitive.
+ * Example:
+ *   line: 3oLeg!michel_92#
+ *   names in 'root' trie: michel, tanya, sofi, oleg, ...
+ *   output masks: 3||||!michel_92#, 3oLeg!||||||_92#
+ */
 void write_matches(TrieNode *root, FILE *output_file, const char *line) {
     // line ends with a new line
     const size_t L = strlen(line);
@@ -176,24 +193,29 @@ void write_matches(TrieNode *root, FILE *output_file, const char *line) {
 }
 
 
+/**
+ * Write matches for each line in 'wordlist_path' file.
+ */
 int8_t write_matches_from_wordlist(TrieNode *root, char *wordlist_path) { 
-    FILE* wordlist_file = fopen(wordlist_path, "r");
-    if (wordlist_file == NULL) {
-        return 1;
-    }
-
     struct stat st = {0};
     if (stat("masks", &st) == -1) {
         // directory does not exist
         if (mkdir("masks", 0700) != 0) {
-            printf("Could not create 'masks' folder.\n");
+            fprintf(stderr, "Could not create 'masks' folder.\n");
             return 1;
         }
     }
 
-    FILE *output_file = fopen("masks/masks.raw", "w");
+    const char output_file_path[] = "masks/masks.raw";
+    FILE *output_file = fopen(output_file_path, "w");
     if (output_file == NULL) {
-        printf("Couldn't open the output file for writing. Exiting\n");
+        fprintf(stderr, "Couldn't open '%s' file for writing.\n", output_file_path);
+        return 1;
+    }
+
+    FILE* wordlist_file = fopen(wordlist_path, "r");
+    if (wordlist_file == NULL) {
+        fprintf(stderr, "Wrong wordlist path: %s\n,", wordlist_path);
         return 1;
     }
 
@@ -215,6 +237,7 @@ int8_t write_matches_from_wordlist(TrieNode *root, char *wordlist_path) {
         fprintf(stderr, "Error is occured while writing to the output file. Please re-run the script.");
     }
     clearerr(output_file);
+    printf("Wrote masked lines in %s\n", output_file_path);
 
     fclose(output_file);
     fclose(wordlist_file);
@@ -223,6 +246,9 @@ int8_t write_matches_from_wordlist(TrieNode *root, char *wordlist_path) {
 }
 
 
+/**
+ * Write most used people names statistics in masks/masks.stats.
+ */
 void write_statistics(const TrieNode *node, FILE *matches_file, char *prefix, const int32_t prefix_len) {
     if (node == NULL) {
         return;
@@ -243,36 +269,41 @@ void write_statistics(const TrieNode *node, FILE *matches_file, char *prefix, co
     }
 }
 
-
+/**
+ * Create masks of how people names are used as passwords.
+ * 
+ * Usage: ./create_masks.o /path/to/names /path/to/wordlist
+ * The output masked lines will be stored in masks/masks.raw.
+ */
 int main(int argc, char* argv[]) {
-    // usage: ./create_masks.o /path/to/names /path/to/wordlist
-
     TrieNode* root = make_trienode();
     int8_t status_code;
     status_code = build_trie_from_path(root, argv[1]);
     if (status_code != 0) {
-        printf("Error while reading names file %s\n", argv[1]);
+        fprintf(stderr, "Error while reading names file %s\n", argv[1]);
         return status_code;
     }
 
     status_code = write_matches_from_wordlist(root, argv[2]);
     if (status_code != 0) {
-        printf("Error while parsing wordlist file %s\n", argv[2]);
+        free_trienode(root);
         return status_code;
     }
 
     // write statistics
-    FILE* matches_file = fopen("masks/most_used_names.txt", "w");
+    const char matches_path[] = "masks/most_used_names.txt";
+    FILE* matches_file = fopen(matches_path, "w");
     if (matches_file == NULL) {
-        fprintf(stderr, "Couldn't write statistics in 'masks/most_used_names.txt'\n");
-        return 1;
+        fprintf(stderr, "Couldn't open '%s' to write statistics\n", matches_path);
+    } else {
+        char prefix[MAX_LINE_LENGTH];
+        int32_t i;
+        for (i=0; i<MAX_LINE_LENGTH; i++) {
+            prefix[i] = 0;
+        }
+        write_statistics(root, matches_file, prefix, 0);
+        printf("Wrote most used names in %s\n", matches_path);
     }
-    char prefix[MAX_LINE_LENGTH];
-    int32_t i;
-    for (i=0; i<MAX_LINE_LENGTH; i++) {
-        prefix[i] = 0;
-    }
-    write_statistics(root, matches_file, prefix, 0);
     fclose(matches_file);
 
     /* free the used memory */
