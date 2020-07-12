@@ -1,19 +1,8 @@
 /*
- * Find people names in a wordlist and replace matches with a mask REPLACE_CHAR.
- * Brute force algorithm:
- * 
- * for each line in wordlist do
- *   for each person_name in people_names_list do
- *     if person_name is in the line
- *       replace person_name with a mask
- *       append the masked line into a file
- *   done
- * done
- *
- * A trie is used to avoid the brute force.
+ * Generate password candidates from masks and chosen people names.
  *
  * Danylo Ulianych
- * Jul 1, 2020
+ * Jul 11, 2020
  */
 
 #include <stdio.h>
@@ -22,13 +11,15 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define   MAX_LINE_LENGTH    512   // Max record size
 #define   REPLACE_CHAR       '|'
-#define   PROGRESS_EACH      100000
-#define   ALPHABET_SIZE      26    // 26 English lowercase letters
 
+// temp buffer to generate password candidates; allocated once
 char candidate[MAX_LINE_LENGTH];
+
+// the first line in the names buffer with the specified length
 int32_t first_line_of_length[MAX_LINE_LENGTH];
 
 
@@ -76,22 +67,87 @@ char* read_names(const char *path, int32_t *names_buf_size)
 }
 
 
+int compare_length(const void *pa, const void *pb) {
+    const char *a = *(const char **)pa;
+    const char *b = *(const char **)pb;
+    int32_t fa = (int32_t) strlen(a);
+    int32_t fb = (int32_t) strlen(b);
+    return fb - fa; 
+}
+
+
+int8_t sort_names_by_length(char *names_buf, const int32_t names_buf_size) {
+    int32_t char_id;
+    int32_t names_num = 0, start = 0, max_length = 0;
+    for (char_id = 0; char_id < names_buf_size; char_id++) {
+        if (names_buf[char_id] == '\n') {
+            names_num++;
+            if (char_id - start > max_length) {
+                max_length = char_id - start;
+            }
+            start = char_id + 1;
+        }
+    }
+    char **names_start = (char**) malloc(sizeof(char*) * names_num);
+
+    if (names_start == NULL)
+        return 1;
+
+    // each line of names_start is a fixed-length string
+    int32_t lid = 0;
+    start = 0;
+    for (char_id = 0; char_id < names_buf_size; char_id++) {
+        if (names_buf[char_id] == '\n') {
+            names_buf[char_id] = '\0';
+            names_start[lid] = (char*) calloc(max_length, sizeof(char));
+            memmove(names_start[lid], names_buf + start, char_id - start);
+            start = char_id + 1;
+            lid++;
+        }
+    }
+
+    // sort strings by length in descending order
+    qsort(names_start, names_num, sizeof(names_start[0]), compare_length);
+
+    // populate sorted names into contiguous input buffer
+    size_t line_size;
+    char *pname;
+    char_id = 0;
+    for (lid = 0; lid < names_num; lid++) {
+        pname = names_start[lid];
+        line_size = strlen(pname);
+        memmove(names_buf + char_id, pname, line_size);
+        names_buf[char_id + line_size] = '\n';  // keep original word delimiter
+        char_id += line_size + 1;
+    }
+
+    for (lid = 0; lid < names_num; lid++) {
+        free(names_start[lid]);
+    }
+    free(names_start);
+
+    return 0;
+}
+
 int32_t* make_names_end_positions(const char *names_buf, const int32_t names_buf_size) {
     int32_t char_id;
     int32_t names_num = 0;
     for (char_id = 0; char_id < names_buf_size; char_id++) {
         names_num += names_buf[char_id] == '\n';
     }
-    int32_t *names_end = (int32_t*)calloc(names_num, sizeof(int32_t));
+    int32_t *names_end = (int32_t*) calloc(names_num, sizeof(int32_t));
 
     if (names_end == NULL)
         return NULL;
 
-    int32_t lid = 0, start=0, size=0, size_upper=MAX_LINE_LENGTH;
+    int32_t size=0, size_upper=MAX_LINE_LENGTH;
     for (size = 0; size < MAX_LINE_LENGTH; size++){
         first_line_of_length[size] = -1;
     }
 
+    // populate names_end buffer with ending positions and save
+    // find the first line of a given length in the sorted array
+    int32_t lid=0, start=0;
     for (char_id = 0; char_id < names_buf_size; char_id++) {
         if (names_buf[char_id] == '\n') {
             names_end[lid] = char_id;
@@ -99,6 +155,10 @@ int32_t* make_names_end_positions(const char *names_buf, const int32_t names_buf
             if (size < size_upper) {
                 first_line_of_length[size] = lid;
                 size_upper = size;
+            } else if (size > size_upper) {
+                fprintf(stderr, "Input 'names_buf' array must be sorted by length in descending order. Exiting.\n");
+                free(names_end);
+                return NULL;
             }
             lid++;
             start = char_id + 1;
@@ -145,7 +205,7 @@ void generate_passwords(const char *line, const int32_t offset, const char *name
     mask_start -= offset;
     mask_end -= offset;
     memmove(candidate, (char*) (line + offset), candidate_size);
-    candidate[candidate_size] = '\0';
+    candidate[candidate_size] = '\0';  // candidate[candidate_size-1] points to a new line
     
     int32_t lid, name_start, i;
     if (first_line > 0) {
@@ -221,6 +281,17 @@ int main(int argc, char* argv[]) {
     if (names_buf == NULL) {
         printf("Error while reading names file %s\n", argv[1]);
         return 1;
+    }
+
+    if (sort_names_by_length(names_buf, names_buf_size) != 0) {
+        free(names_buf);
+        fprintf(stderr, "Could not allocate memory to sort the 'names_buf' array.\n");
+        return 1;
+    }
+
+    int32_t i;
+    for (i = 0; i < names_buf_size; i++) {
+        printf("%c", names_buf[i]);
     }
 
     int32_t *names_end;
