@@ -9,3 +9,8 @@ bash/*
 *.o
 *.swp
 *.txt
+
+# binary
+create_masks
+generate
+

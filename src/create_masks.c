@@ -276,6 +276,11 @@ void write_statistics(const TrieNode *node, FILE *matches_file, char *prefix, co
  * The output masked lines will be stored in masks/masks.raw.
  */
 int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: ./create_masks.o /path/to/names.ascii /path/to/wordlist\n");
+        return 1; 
+    }
+
     TrieNode* root = make_trienode();
     int8_t status_code;
     status_code = build_trie_from_path(root, argv[1]);

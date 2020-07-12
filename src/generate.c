@@ -174,7 +174,7 @@ int32_t* make_names_end_positions(const char *names_buf, const int32_t names_buf
 
 void generate_passwords(const char *line, const int32_t offset, const char *names_buf, const int32_t *names_end) {
     const size_t line_size = strlen(line);
-    int32_t mask_start=0;
+    int32_t mask_start = 0;
     while (mask_start<line_size && line[mask_start] != REPLACE_CHAR) {
         mask_start++;
     }
@@ -182,8 +182,8 @@ void generate_passwords(const char *line, const int32_t offset, const char *name
         // not found
         return;
     }
-    int32_t mask_end=mask_start;
-    while (mask_end<line_size && line[mask_end] == REPLACE_CHAR) {
+    int32_t mask_end = mask_start;
+    while (mask_end < line_size && line[mask_end] == REPLACE_CHAR) {
         mask_end++;
     }
     // mask_end points to the next char after REPLACE_CHAR
@@ -250,7 +250,7 @@ int32_t get_line_column_offset(const char *line) {
 }
 
 
-int8_t generate_passwords_from_path(const char *masks_stats_path, const char *names_buf, const int32_t *names_end) {
+int8_t generate_passwords_from_path(const char *masks_stats_path, const char *names_buf, const int32_t *names_end, const int32_t top_masks) {
     FILE *masks_stats_file = fopen(masks_stats_path, "r");
     if (masks_stats_file == NULL) {
         return 1;
@@ -258,12 +258,17 @@ int8_t generate_passwords_from_path(const char *masks_stats_path, const char *na
     char mask_line[MAX_LINE_LENGTH];
 
     int32_t offset = -1;
+    int32_t lid = 0;
     while (fgets(mask_line, sizeof(mask_line), masks_stats_file)) {
+        if (top_masks != -1 && lid >= top_masks) {
+            break;
+        }
         if (offset == -1 ) {
             // calculated only once
             offset = get_line_column_offset(mask_line);
         }
         generate_passwords(mask_line, offset, names_buf, names_end);
+        lid++;
     }
 
     fclose(masks_stats_file);
@@ -272,14 +277,55 @@ int8_t generate_passwords_from_path(const char *masks_stats_path, const char *na
 }
 
 
+/**
+ * Generate password candidates from names and masks.
+ *
+ * Usage: ./generate [-m top_masks] /path/to/names.ascii /path/to/masks.stats
+ * By default, all masks from /path/to/masks.stats are chosen.
+ */
 int main(int argc, char* argv[]) {
-    // usage: ./create_masks.o /path/to/names /path/to/wordlist
+    int32_t top_masks = -1;
+    opterr = 0;
+    int c;
+    char *ignore;
 
-    char *names_buf;
+    while ((c = getopt(argc, argv, "m:")) != -1) {
+        switch (c) {
+            case 'm':
+                top_masks = strtol(optarg, &ignore, 10);
+                break;
+            case '?':
+                if (optopt == 't')
+                  fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                else if (isprint (optopt))
+                  fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+                else
+                  fprintf (stderr,
+                           "Unknown option character `\\x%x'.\n",
+                           optopt);
+                return 1;
+            default:
+                abort();
+        }
+    }
+
+    if (argc - optind != 2) {
+        fprintf(stderr, "Usage: ./generate [-m top_masks] /path/to/names.ascii /path/to/masks.stats\n");
+        return 1;
+    }
+
+    char *names_file_path = argv[optind];
+    char *masks_stats_path = argv[optind + 1];
+
+    if (top_masks != -1) {
+        fprintf(stderr, "[INFO] Choosing %d top masks from %s\n", top_masks, masks_stats_path);
+    } else {
+        fprintf(stderr, "[INFO] Choosing all masks from %s\n", masks_stats_path);
+    }
     int32_t names_buf_size;
-    names_buf = read_names(argv[1], &names_buf_size);
+    char *names_buf = read_names(names_file_path, &names_buf_size);
     if (names_buf == NULL) {
-        printf("Error while reading names file %s\n", argv[1]);
+        fprintf(stderr, "Error while reading names file %s\n", names_file_path);
         return 1;
     }
 
@@ -289,22 +335,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int32_t i;
-    for (i = 0; i < names_buf_size; i++) {
-        printf("%c", names_buf[i]);
-    }
-
-    int32_t *names_end;
-    names_end = make_names_end_positions(names_buf, names_buf_size);
+    int32_t *names_end = make_names_end_positions(names_buf, names_buf_size);
     if (names_end == NULL) {
         free(names_buf);
         return 1;
     }
 
-    int8_t status_code;
-    status_code = generate_passwords_from_path(argv[2], names_buf, names_end);
+    int8_t status_code = generate_passwords_from_path(masks_stats_path, names_buf, names_end, top_masks);
     
-
     // cleanup
     free(names_buf);
     free(names_end);
