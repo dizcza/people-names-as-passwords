@@ -9,8 +9,6 @@ single mode: 12|1992  --> 12jan1992 12alex1992 12simon1992 12martina1992 12micha
 length mode: 12||||1992  -->  12alex1992 12lena1992 12lora1992 12vika1992 12sofi1992 ...
 ```
 
-Now, only `length` mode is supported.
-
 ### Usage
 
 Refer to [README](../README.md).

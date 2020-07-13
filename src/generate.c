@@ -23,6 +23,13 @@ char candidate[MAX_LINE_LENGTH];
 int32_t first_line_of_length[MAX_LINE_LENGTH];
 
 
+typedef struct MaskMode {
+    uint8_t single_char_mode;
+    uint8_t wpa_mode;
+    int32_t top_masks;
+} MaskMode;
+
+
 char* read_names(const char *path, int32_t *names_buf_size)
 {
     /* declare a file pointer */
@@ -172,15 +179,21 @@ int32_t* make_names_end_positions(const char *names_buf, const int32_t names_buf
 }
 
 
-void generate_passwords(const char *line, const int32_t offset, const char *names_buf, const int32_t *names_end) {
+int8_t generate_passwords(const char *line, const int32_t offset, const char *names_buf, const int32_t *names_end, const MaskMode *mask_mode) {
     const size_t line_size = strlen(line);
+    const int32_t candidate_size = line_size - offset;
+    if (!mask_mode->single_char_mode && mask_mode->wpa_mode && candidate_size < 8) {
+        // not valid for WPA passwords
+        return 0;
+    }
+
     int32_t mask_start = 0;
     while (mask_start<line_size && line[mask_start] != REPLACE_CHAR) {
         mask_start++;
     }
     if (mask_start == line_size) {
         // not found
-        return;
+        return 0;
     }
     int32_t mask_end = mask_start;
     while (mask_end < line_size && line[mask_end] == REPLACE_CHAR) {
@@ -188,44 +201,69 @@ void generate_passwords(const char *line, const int32_t offset, const char *name
     }
     // mask_end points to the next char after REPLACE_CHAR
     const int32_t mask_size = mask_end - mask_start;
-
-    const int32_t first_line = first_line_of_length[mask_size];
-    if (first_line == -1) {
-        // no pattern names with such mask length
-        return;
+    if (mask_mode->single_char_mode && mask_size != 1) {
+        fprintf(stderr, "[ERROR] Expected single-char masks when the single-char mode is enabled. Found masked line %s\n", line);
+        return 1;
     }
-    
-    int32_t size_smaller = mask_size - 1;
+
+    int32_t first_line, stop_line, size_smaller;
+
+    if (mask_mode->single_char_mode) {
+        // loop through all names
+        first_line = 0;
+        size_smaller = 0;
+        if (mask_mode->wpa_mode) {
+            size_smaller = 8 - (candidate_size - 1);
+            if (size_smaller < 0) size_smaller = 0;
+        
+            const int32_t first_line_size = names_end[0];
+            if (first_line_size < size_smaller) {
+                // all name lengths are smaller than needed for WPA attack
+                return 0;
+            }
+        }
+    } else {
+        first_line = first_line_of_length[mask_size];
+        if (first_line == -1) {
+            // no pattern names with such mask length
+            return 0;
+        } 
+        size_smaller = mask_size - 1;
+    }
     while (size_smaller>0 && first_line_of_length[size_smaller] == -1) {
         size_smaller--;
     }
-    const int32_t stop_line = first_line_of_length[size_smaller];
+    stop_line = first_line_of_length[size_smaller];
 
-    const int32_t candidate_size = line_size - offset;
+
     mask_start -= offset;
     mask_end -= offset;
     memmove(candidate, (char*) (line + offset), candidate_size);
     candidate[candidate_size] = '\0';  // candidate[candidate_size-1] points to a new line
     
-    int32_t lid, name_start, i;
+    int32_t lid, name_start, name_size, suffix_size;
     if (first_line > 0) {
         name_start = names_end[first_line-1] + 1;
     } else {
         name_start = 0;
     }
-    char *pname;
     for (lid = first_line; lid < stop_line; lid++) {
-        pname = (char*) (names_buf + name_start);
-        for (i = mask_start; i < mask_end; i++) {
-            candidate[i] = *pname;
-            pname++;
+        name_size = names_end[lid] - name_start;
+        memmove((char*)(candidate + mask_start), (char*)(names_buf + name_start), name_size);
+        if (mask_mode->single_char_mode) {
+            suffix_size = candidate_size - mask_end + 1;
+            memmove((char*)(candidate + mask_start + name_size),
+                    (char*)(line + offset + mask_end),
+                    suffix_size);
         }
+        
         printf("%s", candidate);
 
         // names_end[lid] points to a new line char
         name_start = names_end[lid] + 1;
     }
 
+    return 0;
 }
 
 
@@ -250,24 +288,27 @@ int32_t get_line_column_offset(const char *line) {
 }
 
 
-int8_t generate_passwords_from_path(const char *masks_stats_path, const char *names_buf, const int32_t *names_end, const int32_t top_masks) {
+int8_t generate_passwords_from_path(const char *masks_stats_path, const char *names_buf, const int32_t *names_end, const MaskMode *mask_mode) {
     FILE *masks_stats_file = fopen(masks_stats_path, "r");
     if (masks_stats_file == NULL) {
         return 1;
     }
     char mask_line[MAX_LINE_LENGTH];
 
-    int32_t offset = -1;
-    int32_t lid = 0;
+    int32_t offset = -1, lid = 0;
+    int8_t status_code = 0;
     while (fgets(mask_line, sizeof(mask_line), masks_stats_file)) {
-        if (top_masks != -1 && lid >= top_masks) {
+        if (mask_mode->top_masks != -1 && lid >= mask_mode->top_masks) {
             break;
         }
         if (offset == -1 ) {
             // calculated only once
             offset = get_line_column_offset(mask_line);
         }
-        generate_passwords(mask_line, offset, names_buf, names_end);
+        status_code = generate_passwords(mask_line, offset, names_buf, names_end, mask_mode);
+        if (status_code != 0) {
+            return status_code;
+        }
         lid++;
     }
 
@@ -277,22 +318,56 @@ int8_t generate_passwords_from_path(const char *masks_stats_path, const char *na
 }
 
 
+void MaskMode_PrintChosenOptions(const MaskMode *mask_mode, const char *masks_stats_path) {
+    if (mask_mode->top_masks != -1) {
+        fprintf(stderr, "[INFO] Choosing %d top masks from '%s'\n", mask_mode->top_masks, masks_stats_path);
+    } else {
+        fprintf(stderr, "[INFO] Choosing all masks from '%s'\n", masks_stats_path);
+    }
+    if (mask_mode->single_char_mode) {
+        fprintf(stderr, "[INFO] Enabling single-char mode. Make sure that all masks in '%s' are single-char masks\n", masks_stats_path);
+    }
+    if (mask_mode->wpa_mode) {
+        fprintf(stderr, "[INFO] Enabling WPA mode\n");
+    }
+}
+
+
 /**
  * Generate password candidates from names and masks.
  *
- * Usage: ./generate [-m top_masks] /path/to/names.ascii /path/to/masks.stats
- * By default, all masks from /path/to/masks.stats are chosen.
+ * Usage: ./generate [-s] [-w] [-m top_masks] /path/to/names.ascii /path/to/masks.stats
+ * Option flags:
+ *   -s               Enable single char mode masks: each mask must constist of exactly 1 REPLACE_CHAR.
+ *                    In single mode, the names of all lengths are substituted. Example:
+ *                    '12|1992'  --> 12jan1992 12alex1992 12simon1992 12martina1992 12michael1992
+ *
+ *   -w               Enable WPA mode: print passwords that are at least 8 characters long.
+ *
+ *   -m <top_masks>   Choose only top 'm' masks from /path/to/masks.stats.
+ *                    By default, all masks are chosen. Example:
+ *                    ./generate -m 1000 ...
  */
 int main(int argc, char* argv[]) {
-    int32_t top_masks = -1;
     opterr = 0;
     int c;
     char *ignore;
+    MaskMode mask_mode = {
+        .single_char_mode=0U,
+        .wpa_mode=0U,
+        .top_masks=-1
+    };
 
-    while ((c = getopt(argc, argv, "m:")) != -1) {
+    while ((c = getopt(argc, argv, "swm:")) != -1) {
         switch (c) {
+            case 's':
+                mask_mode.single_char_mode = 1U;
+                break;
+            case 'w':
+                mask_mode.wpa_mode = 1U;
+                break;
             case 'm':
-                top_masks = strtol(optarg, &ignore, 10);
+                mask_mode.top_masks = strtol(optarg, &ignore, 10);
                 break;
             case '?':
                 if (optopt == 't')
@@ -310,18 +385,15 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc - optind != 2) {
-        fprintf(stderr, "Usage: ./generate [-m top_masks] /path/to/names.ascii /path/to/masks.stats\n");
+        fprintf(stderr, "Usage: ./generate [-s] [-w] [-m top_masks] /path/to/names.all /path/to/masks.stats\n");
         return 1;
     }
 
     char *names_file_path = argv[optind];
     char *masks_stats_path = argv[optind + 1];
 
-    if (top_masks != -1) {
-        fprintf(stderr, "[INFO] Choosing %d top masks from %s\n", top_masks, masks_stats_path);
-    } else {
-        fprintf(stderr, "[INFO] Choosing all masks from %s\n", masks_stats_path);
-    }
+    MaskMode_PrintChosenOptions(&mask_mode, masks_stats_path);
+  
     int32_t names_buf_size;
     char *names_buf = read_names(names_file_path, &names_buf_size);
     if (names_buf == NULL) {
@@ -341,14 +413,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int8_t status_code = generate_passwords_from_path(masks_stats_path, names_buf, names_end, top_masks);
-    
-    // cleanup
+    int8_t status_code = generate_passwords_from_path(masks_stats_path, names_buf, names_end, &mask_mode);
+
+
+MAIN_CLEANUP:
     free(names_buf);
     free(names_end);
 
     if (status_code != 0) {
-        fprintf(stderr, "Error orrured during password candidates generation.");
+        fprintf(stderr, "Error orrured during password candidates generation.\n");
     }
 
     return status_code;
