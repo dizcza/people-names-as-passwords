@@ -32,6 +32,11 @@ char line_mask[MAX_LINE_LENGTH];
 char line_lower[MAX_LINE_LENGTH];
 char buffer_info[2*MAX_LINE_LENGTH];
 
+// Counts num. of times a char was toggled (uppercase).
+// The last value of each mask size line counts the total number
+// of masks of such size. 
+uint64_t toggle_stat[MAX_LINE_LENGTH][MAX_LINE_LENGTH + 1];
+
 typedef struct TrieNode TrieNode;
 
 struct TrieNode {
@@ -159,6 +164,7 @@ void write_matches(TrieNode *root, FILE *output_file, const char *line) {
 
     TrieNode *node, *longest_match_node;
     int32_t start, index, char_id, longest_index;
+    uint64_t *toggle;
     for (start=0; start<L; start++) {
         node = root;
         longest_match_node = NULL;
@@ -183,8 +189,11 @@ void write_matches(TrieNode *root, FILE *output_file, const char *line) {
         if (longest_match_node != NULL) {
             longest_match_node->count++;
             memmove(line_mask, line, L);
+            toggle = toggle_stat[longest_index - start];
+            toggle[MAX_LINE_LENGTH]++;
             for (i=start; i<longest_index; i++) {
                 line_mask[i] = REPLACE_CHAR;
+                toggle[i - start] += line[i] != line_lower[i];
             }
             // line and line_mask already end with '\n'
             fputs(line_mask, output_file);
@@ -269,6 +278,35 @@ void write_statistics(const TrieNode *node, FILE *matches_file, char *prefix, co
     }
 }
 
+
+int8_t write_toggle_statistics(const char *path) {
+    FILE *toggle_file = fopen(path, "w");
+    if (toggle_file == NULL) {
+        return 1;
+    }
+    int32_t line_size, offset, i;
+    uint64_t *toggle;
+    char info[1024];
+    fputs("Toggle statistics.\nColumns:\n\t(1) mask size;\n\t(2) masks count;\n\t(3+) num. of times the positional character has been toggled (to uppercase).\n", toggle_file);
+    for (line_size = 0; line_size < MAX_LINE_LENGTH; line_size++) {
+        toggle = toggle_stat[line_size];
+        if (toggle[MAX_LINE_LENGTH] > 0) {
+            offset = sprintf(info, "size %d (total %lu): ", line_size, toggle[MAX_LINE_LENGTH]);
+            for (i = 0; i < line_size; i++) {
+                offset += sprintf(info + offset, "%lu ", toggle[i]);
+            }
+            info[offset] = '\n';
+            info[offset + 1] = '\0';
+            fputs(info, toggle_file);
+        }
+    }
+
+    fclose(toggle_file);
+
+    return 0;
+}
+
+
 /**
  * Create masks of how people names are used as passwords.
  * 
@@ -309,6 +347,9 @@ int main(int argc, char* argv[]) {
         write_statistics(root, matches_file, prefix, 0);
         printf("Wrote most used names in %s\n", matches_path);
     }
+
+    write_toggle_statistics("masks/toggle_statistics.txt");
+
     fclose(matches_file);
 
     /* free the used memory */

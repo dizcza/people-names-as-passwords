@@ -258,6 +258,8 @@ int8_t generate_passwords(const char *line, const int32_t offset, const char *na
         }
         
         printf("%s", candidate);
+        candidate[mask_start] = toupper(candidate[mask_start]);
+        printf("%s", candidate);
 
         // names_end[lid] points to a new line char
         name_start = names_end[lid] + 1;
