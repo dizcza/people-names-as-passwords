@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # prepare people names
-bash bash/load_valid_names.sh
+bash bash/load_names.sh
 
 # download a test wordlist
 if [ ! -f "wordlists/Top304Thousand-probable-v2.txt" ]; then

@@ -9,7 +9,7 @@ The outcome of this research project will be eventually utilized in [hashcat-wpa
 ### Create masks
 
 ```
-$ sudo apt install konwert dos2unix
+$ sudo apt install konwert
 $ ./run.sh
 $ head -n10 masks/wpa/length/masks.stats
    4629 ||||||||

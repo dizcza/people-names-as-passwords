@@ -1,15 +1,17 @@
 ## Creating the masks
 
-### Data source
+### Data sources
 
-50k first names from 54 countries, collected by a German coomputer magazine under GNU Free Documentation License in 2002, are mirrored onto [Dropbox](https://www.dropbox.com/s/l0mskgdp1hsv04n/0717-182.zip) to prevent flooding the original source.
+1. 50k first names from 54 countries, collected by a [German computer magazine](https://www.heise.de/ct/ftp/07/17/182/) under GNU Free Documentation License in 2002, are mirrored onto Dropbox ([link](https://www.dropbox.com/s/l0mskgdp1hsv04n/0717-182.zip)).
+2. USA people names (1880-2018 yy., [link](https://www.ssa.gov/oact/babynames/limits.html)) that occurred at least 20 times are added to the previous source.
+3. 4k pet names ([link](https://data.muni.org/Other/Dog-Names/a9a7-y93v)).
 
-The first names are parsed into ASCII equivalent words and stored in `gender/names` folder (see [load_valid_names.sh](bash/load_valid_names.sh)).
+In total, 66k names of length 4 and more are compiled within one file after you run `./bash/load_names.sh`.
 
 ### Limitations:
 
 * all original words containing symbol `|` are excluded from the wordlist;
-* only names of at least 4 characters long are considered to collect the statistics. You can change this option in [load_valid_names.sh](bash/load_valid_names.sh). Later on, at passwords generation phase, names of all lengths will be generated.
+* only names of at least 4 characters long are considered to collect the statistics. You can change this option in [load_names.sh](../bash/load_names.sh). Later on, at passwords generation phase, names of all lengths will be generated.
 
 
 ### Most used first names

@@ -2,6 +2,7 @@
 gender/
 ignored/
 wordlists/
+names/
 masks*
 bash/*
 !bash/*.sh
