@@ -181,6 +181,10 @@ int32_t* make_names_end_positions(const char *names_buf, const int32_t names_buf
 
 int8_t generate_passwords(const char *line, const int32_t offset, const char *names_buf, const int32_t *names_end, const MaskMode *mask_mode) {
     const size_t line_size = strlen(line);
+    if (line_size == 1) {
+        // only a new line char; skip
+        return 0;
+    }
     const int32_t candidate_size = line_size - offset;
     if (!mask_mode->single_char_mode && mask_mode->wpa_mode && candidate_size < 8) {
         // not valid for WPA passwords
@@ -270,23 +274,31 @@ int8_t generate_passwords(const char *line, const int32_t offset, const char *na
 
 
 int32_t get_line_column_offset(const char *line) {
-    int32_t i = 0;
     const size_t line_size = strlen(line);
-    while (i < line_size && line[i] == ' ') {
-        // string left spaces
+    if (line_size == 1) {
+        // only a new line char; skip
+        return -1;
+    }
+    
+    int32_t i = 0;
+    while (i < line_size && line[i] != REPLACE_CHAR) {
         i++;
     }
-    while (i < line_size && line[i] != ' ') {
-        // string word count
+    if (i == line_size) {
+        fprintf(stderr, "No valid mask characters '%c' in the input line.\n", REPLACE_CHAR);
+        return -1;
+    }
+    while (i >= 0 && line[i] != ' ') {
+        i--;
+    }
+    if (i == -1) {
+        // no leading spaces in the input masks
+        i = 0;
+    } else {
+        // now 'i' points to the start of a mask
         i++;
     }
-
-    if (i == 0 || i >= line_size - 1) {
-        fprintf(stderr, "Did you pass masks.raw (wrong) or masks.stats (correct) file path?\n");
-        return 0;
-    }
-
-    return i + 1;
+    return i;
 }
 
 
@@ -307,9 +319,11 @@ int8_t generate_passwords_from_path(const char *masks_stats_path, const char *na
             // calculated only once
             offset = get_line_column_offset(mask_line);
         }
-        status_code = generate_passwords(mask_line, offset, names_buf, names_end, mask_mode);
-        if (status_code != 0) {
-            return status_code;
+        if (offset != -1) {
+            status_code = generate_passwords(mask_line, offset, names_buf, names_end, mask_mode);
+            if (status_code != 0) {
+                return status_code;
+            }
         }
         lid++;
     }
@@ -418,7 +432,6 @@ int main(int argc, char* argv[]) {
     int8_t status_code = generate_passwords_from_path(masks_stats_path, names_buf, names_end, &mask_mode);
 
 
-MAIN_CLEANUP:
     free(names_buf);
     free(names_end);
 

@@ -1,8 +1,5 @@
 #!/bin/bash
 
-CURR_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-MASKS_DIR="${CURR_DIR}/masks"
-
 # prepare people names
 bash bash/load_names.sh
 
@@ -21,8 +18,8 @@ sort -nr masks/most_used_names.txt > masks/most_used_names.sorted
 rm masks/most_used_names.txt
 echo "Sorting masks by count"
 echo "  length mode"
-sort ${MASKS_DIR}/masks.raw | uniq -c | sort -nr > ${MASKS_DIR}/masks.count
+sort masks/masks.raw | uniq -c | sort -nr > masks/masks.count
 echo "  single-char mode"
-sed -E 's/\|+/|/' ${MASKS_DIR}/masks.raw | sort | uniq -c | sort -nr > ${MASKS_DIR}/masks.count.single
+sed -E 's/\|+/|/' masks/masks.count | sort -k2 | awk -f bash/single-char.awk | sort -nr | column -t > masks/masks.count.single
 
 echo "Done."
