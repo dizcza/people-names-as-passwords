@@ -27,6 +27,7 @@ typedef struct MaskMode {
     uint8_t single_char_mode;
     uint8_t wpa_mode;
     int32_t top_masks;
+    int32_t toggle_id;
 } MaskMode;
 
 
@@ -251,6 +252,7 @@ int8_t generate_passwords(const char *line, const int32_t offset, const char *na
     } else {
         name_start = 0;
     }
+    int32_t toggle_pos;
     for (lid = first_line; lid < stop_line; lid++) {
         name_size = names_end[lid] - name_start;
         memmove((char*)(candidate + mask_start), (char*)(names_buf + name_start), name_size);
@@ -261,8 +263,10 @@ int8_t generate_passwords(const char *line, const int32_t offset, const char *na
                     suffix_size);
         }
         
-        printf("%s", candidate);
-        candidate[mask_start] = toupper(candidate[mask_start]);
+        if (mask_mode->toggle_id != -1 && name_size > mask_mode->toggle_id) {
+            toggle_pos = mask_start + mask_mode->toggle_id;
+            candidate[toggle_pos] = toupper(candidate[toggle_pos]);
+        }
         printf("%s", candidate);
 
         // names_end[lid] points to a new line char
@@ -360,9 +364,11 @@ void MaskMode_PrintChosenOptions(const MaskMode *mask_mode, const char *masks_st
  *
  *   -w               Enable WPA mode: print passwords that are at least 8 characters long.
  *
- *   -m <top_masks>   Choose only top 'm' masks from /path/to/masks.stats.
+ *   -m <top-masks>   Choose only top 'm' masks from /path/to/masks.stats.
  *                    By default, all masks are chosen. Example:
  *                    ./generate -m 1000 ...
+ *
+ *   -T <toggle-id>   Toggle character by id.
  */
 int main(int argc, char* argv[]) {
     opterr = 0;
@@ -371,10 +377,11 @@ int main(int argc, char* argv[]) {
     MaskMode mask_mode = {
         .single_char_mode=0U,
         .wpa_mode=0U,
-        .top_masks=-1
+        .top_masks=-1,
+        .toggle_id=-1
     };
 
-    while ((c = getopt(argc, argv, "swm:")) != -1) {
+    while ((c = getopt(argc, argv, "swm:T:")) != -1) {
         switch (c) {
             case 's':
                 mask_mode.single_char_mode = 1U;
@@ -384,6 +391,9 @@ int main(int argc, char* argv[]) {
                 break;
             case 'm':
                 mask_mode.top_masks = strtol(optarg, &ignore, 10);
+                break;
+            case 'T':
+                mask_mode.toggle_id = strtol(optarg, &ignore, 2);
                 break;
             case '?':
                 if (optopt == 't')
@@ -401,7 +411,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc - optind != 2) {
-        fprintf(stderr, "Usage: ./generate [-s] [-w] [-m top_masks] /path/to/names.all /path/to/masks.stats\n");
+        fprintf(stderr, "Usage: ./generate [-s] [-w] [-m top-masks] [-T toggle-id] /path/to/names.all /path/to/masks.stats\n");
         return 1;
     }
 
