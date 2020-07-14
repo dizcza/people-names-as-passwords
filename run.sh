@@ -1,5 +1,8 @@
 #!/bin/bash
 
+CURR_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+MASKS_DIR="${CURR_DIR}/masks"
+
 # prepare people names
 bash bash/load_names.sh
 
@@ -11,9 +14,15 @@ fi
 
 echo "Creating raw masks..."
 gcc -O1 -o create_masks.o src/create_masks.c
-./create_masks.o gender/names/ascii.valid wordlists/Top304Thousand-probable-v2.txt
+./create_masks.o names/names.all wordlists/Top304Thousand-probable-v2.txt
 
-# postprocessing; create hashcat masks
-bash bash/masks_statistics.sh
+# postprocessing; sort masks by count
+sort -nr masks/most_used_names.txt > masks/most_used_names.sorted
+rm masks/most_used_names.txt
+echo "Sorting masks by count"
+echo "  length mode"
+sort ${MASKS_DIR}/masks.raw | uniq -c | sort -nr > ${MASKS_DIR}/masks.count
+echo "  single-char mode"
+sed -E 's/\|+/|/' ${MASKS_DIR}/masks.raw | sort | uniq -c | sort -nr > ${MASKS_DIR}/masks.count.single
 
 echo "Done."

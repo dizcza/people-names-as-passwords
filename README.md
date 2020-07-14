@@ -30,18 +30,31 @@ Here is how you read the output:
 * plain names of exactly 8 characters appeared 4629 times;
 * names of length 7 with suffix `1` appeared 2005 times ...
 
-The `run.sh` script needs to be run only once. Hashcat masks (not shown here) will be stored in `masks/**/length/masks.hashcat`.
+The `run.sh` script needs to be run only once.
+
+### Hashcat masks
+
+To create top 100 x 3 valid hashcat masks (lowercase, capitalize, and uppercase), run
+
+```
+$ awk '{ if (FNR<=100) print $2}' masks/masks.count | awk '{
+      gsub("\\|", "l?"); print;
+      sub("l\\?", "u?", $1); print;
+      gsub("l\\?", "u?"); print
+  }' > masks/masks.hashcat
+```
+
 
 ### Generate probable passwords
 
-Based on the masks statistics from the previous step, we can generate new passwords:
+To avoid brute forcing with hashcat masks, we can generate new _probable_ passwords:
 
 ```
 gcc -O1 -o generate src/generate.c
-./generate -m 1000 gender/names/ascii.valid masks/masks.stats
+./generate -m 1000 names/names.all masks/masks.count
 ```
 
-The script above takes top `1000` masks from `masks/masks.stats`, assuming you already did `./run.sh`, and prints new password candidates to the standard output. The output can be piped in `hashcat --stdin`. Password generation is fast - approximately 14M candidates per second.
+The script above takes top `1000` masks from `masks/masks.count`, assuming you already did `./run.sh`, and prints new password candidates to the standard output. The output can be piped in `hashcat --stdin`. Password generation is fast - approximately 14M candidates per second.
 
 
 ## In Depth

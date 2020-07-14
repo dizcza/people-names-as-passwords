@@ -303,6 +303,8 @@ int8_t write_toggle_statistics(const char *path) {
 
     fclose(toggle_file);
 
+    printf("Wrote toggle characters statistics in %s\n", path);
+
     return 0;
 }
 
