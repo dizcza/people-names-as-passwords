@@ -4,8 +4,6 @@ ignored/
 wordlists/
 names/
 masks*
-bash/*
-!bash/*.sh
 *.pyc
 *.o
 *.swp
