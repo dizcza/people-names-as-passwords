@@ -31,6 +31,10 @@ typedef struct MaskMode {
 } MaskMode;
 
 
+/* Functions declaration */
+int32_t get_column_offset(const char *line);
+
+
 char* read_names(const char *path, int32_t *names_buf_size)
 {
     /* declare a file pointer */
@@ -180,10 +184,15 @@ int32_t* make_names_end_positions(const char *names_buf, const int32_t names_buf
 }
 
 
-int8_t generate_passwords(const char *line, const int32_t offset, const char *names_buf, const int32_t *names_end, const MaskMode *mask_mode) {
+int8_t generate_passwords(const char *line, const char *names_buf, const int32_t *names_end, const MaskMode *mask_mode) {
     const size_t line_size = strlen(line);
     if (line_size == 1) {
         // only a new line char; skip
+        return 0;
+    }
+    const int32_t offset = get_column_offset(line);
+    if (offset == -1) {
+        // no valid mask characters found
         return 0;
     }
     const int32_t candidate_size = line_size - offset;
@@ -277,7 +286,7 @@ int8_t generate_passwords(const char *line, const int32_t offset, const char *na
 }
 
 
-int32_t get_line_column_offset(const char *line) {
+int32_t get_column_offset(const char *line) {
     const size_t line_size = strlen(line);
     if (line_size == 1) {
         // only a new line char; skip
@@ -313,21 +322,15 @@ int8_t generate_passwords_from_path(const char *masks_stats_path, const char *na
     }
     char mask_line[MAX_LINE_LENGTH];
 
-    int32_t offset = -1, lid = 0;
+    int32_t lid = 0;
     int8_t status_code = 0;
     while (fgets(mask_line, sizeof(mask_line), masks_stats_file)) {
         if (mask_mode->top_masks != -1 && lid >= mask_mode->top_masks) {
             break;
         }
-        if (offset == -1 ) {
-            // calculated only once
-            offset = get_line_column_offset(mask_line);
-        }
-        if (offset != -1) {
-            status_code = generate_passwords(mask_line, offset, names_buf, names_end, mask_mode);
-            if (status_code != 0) {
-                return status_code;
-            }
+        status_code = generate_passwords(mask_line, names_buf, names_end, mask_mode);
+        if (status_code != 0) {
+            return status_code;
         }
         lid++;
     }
