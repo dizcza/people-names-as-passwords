@@ -14,8 +14,6 @@ gcc -O1 -o create_masks.o src/create_masks.c
 ./create_masks.o names/names.all wordlists/Top304Thousand-probable-v2.txt
 
 # postprocessing; sort masks by count
-sort -nr masks/most_used_names.txt > masks/most_used_names.sorted
-rm masks/most_used_names.txt
 echo "Sorting masks by count"
 echo "  length mode"
 sort masks/masks.raw | uniq -c | sort -nr > masks/masks.count

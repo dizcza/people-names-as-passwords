@@ -19,7 +19,7 @@ In total, 66k names of length 4 and more are compiled within one file after you 
 Most used people first names of length 5 and more:
 
 ```
-$ awk '{if (length($2) >= 5) print}' masks/most_used_names.sorted | head
+$ awk '{if (length($2) >= 5) print}' names/names.count | head
 139989 chris
 128067 angel
 104553 ester

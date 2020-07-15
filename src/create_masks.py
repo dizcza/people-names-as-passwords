@@ -13,10 +13,9 @@ except ImportError:
 REPLACE_CHAR = '|'
 
 ROOT_DIR = Path(__file__).absolute().parent.parent
-MASKS_DIR = ROOT_DIR / "masks"
 
-MASKS_LENGTH = MASKS_DIR / "masks.raw"
-STATS_FILE = MASKS_DIR / "most_used_names.txt"
+MASKS_RAW_PATH = ROOT_DIR / "masks" / "masks.raw"
+NAMES_COUNT_PATH = ROOT_DIR / "names" / "names.count.unsorted"
 
 
 class Node:
@@ -100,19 +99,20 @@ def create_masks_tries(wordlist, patterns):
     for name in names:
         trie.put(name)
 
-    MASKS_DIR.mkdir(exist_ok=True, parents=True)
+    MASKS_RAW_PATH.parent.mkdir(exist_ok=True, parents=True)
 
     with codecs.open(wordlist, 'r', encoding='utf-8',
                      errors='ignore') as infile, \
-            open(MASKS_LENGTH, 'w') as fmasks:
+            open(MASKS_RAW_PATH, 'w') as fmasks:
         for line in tqdm(infile, desc="Creating masks"):
             if REPLACE_CHAR in line:
                 # skip lines with REPLACE_CHAR
                 continue
             trie.write_matches(fmasks, line.rstrip('\n'))
 
+    NAMES_COUNT_PATH.parent.mkdir(exist_ok=True)
     stats = trie.collect_statistics()
-    with open(STATS_FILE, 'w') as f:
+    with open(NAMES_COUNT_PATH, 'w') as f:
         for name, counts in stats.items():
             f.write(f"{counts} {name}\n")
 

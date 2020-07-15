@@ -30,7 +30,6 @@
 
 char line_mask[MAX_LINE_LENGTH];
 char line_lower[MAX_LINE_LENGTH];
-char buffer_info[2*MAX_LINE_LENGTH];
 
 // Counts num. of times a char was toggled (uppercase).
 // The last value of each mask size line counts the total number
@@ -44,16 +43,21 @@ struct TrieNode {
     // Each node has N children, starting from the root
     // and a flag to check if it's a leaf node
     int8_t is_leaf;
+    const TrieNode *parent;
+    char letter;
     TrieNode* children[ALPHABET_SIZE];
-    uint64_t count;  // to allow running on >4B wordlists
+    uint64_t count;  // num. of times the name occured in a password
 };
 
-TrieNode* make_trienode() {
+TrieNode* make_trienode(const TrieNode *parent, const char letter) {
     // Allocate memory for a TrieNode
     TrieNode* node = (TrieNode*) calloc (1, sizeof(TrieNode));
     int32_t i;
-    for (i=0; i<ALPHABET_SIZE; i++)
+    for (i=0; i<ALPHABET_SIZE; i++) {
         node->children[i] = NULL;
+    }
+    node->parent = parent;
+    node->letter = letter;
     node->is_leaf = 0;
     node->count = 0U;
     return node;
@@ -85,7 +89,7 @@ void build_trie(TrieNode *root, const char *names_buf, const int32_t buf_size) {
         } else {
             node_id = (int32_t) names_buf[i] - 'a';
             if (node->children[node_id] == NULL) {
-                node->children[node_id] = make_trienode();
+                node->children[node_id] = make_trienode(node, names_buf[i]);
             }
             node = node->children[node_id];
         }
@@ -255,31 +259,109 @@ int8_t write_matches_from_wordlist(TrieNode *root, char *wordlist_path) {
 }
 
 
-/**
- * Write most used people names statistics in masks/masks.stats.
- */
-void write_statistics(const TrieNode *node, FILE *matches_file, char *prefix, const int32_t prefix_len) {
+void TrieNode_CountLeafs(const TrieNode *node, uint32_t *count) {
     if (node == NULL) {
         return;
     }
     if (node->is_leaf && node->count > 0) {
-        prefix[prefix_len] = '\0';
-        sprintf(buffer_info, "%lu %s\n", node->count, prefix);
-        fputs(buffer_info, matches_file);
+        (*count)++;
     }
     int32_t node_id;
     TrieNode *child;
     for (node_id=0; node_id < ALPHABET_SIZE; node_id++) {
         child = node->children[node_id];
         if (child != NULL) {
-            prefix[prefix_len] = (char) (node_id + 'a');
-            write_statistics(child, matches_file, prefix, prefix_len+1);
+            TrieNode_CountLeafs(child, count);
+        }
+    } 
+}
+
+void TrieNode_WriteLeafs(const TrieNode *node, TrieNode const **list, uint32_t *cur_list_item_id) {
+    if (node == NULL) {
+        return;
+    }
+    if (node->is_leaf && node->count > 0) {
+        list[*cur_list_item_id] = node;
+        (*cur_list_item_id)++;
+    }
+    int32_t node_id;
+    TrieNode *child;
+    for (node_id=0; node_id < ALPHABET_SIZE; node_id++) {
+        child = node->children[node_id];
+        if (child != NULL) {
+            TrieNode_WriteLeafs(child, list, cur_list_item_id);
         }
     }
 }
 
 
-int8_t write_toggle_statistics(const char *path) {
+int compare_node_counts(const void *pa, const void *pb) {
+    const TrieNode *a = *(const TrieNode **)pa;
+    const TrieNode *b = *(const TrieNode **)pb;
+    if (b->count > a->count) {
+        return 1;
+    } else if (b->count < a->count) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+
+/**
+ * Write most used people names with counts.
+ */
+int8_t write_names_count(const TrieNode *root, const char *path) {
+    FILE *file = fopen(path, "w");
+    if (file == NULL) {
+        fprintf(stderr, "Couldn't open '%s' to write names count\n", path); 
+        return 1;
+    }
+
+    uint32_t num_names = 0;
+    TrieNode_CountLeafs(root, &num_names);
+    
+    TrieNode const **list = (TrieNode const**) malloc(num_names * sizeof(TrieNode*));
+
+    uint32_t cur_list_item_id = 0;
+    TrieNode_WriteLeafs(root, list, &cur_list_item_id);
+
+    qsort(list, num_names, sizeof(list[0]), compare_node_counts);
+    
+    char buffer_info[2*MAX_LINE_LENGTH];
+    char name_reversed[MAX_LINE_LENGTH];
+
+    uint32_t name_id;
+    int32_t i;
+    const TrieNode *node;
+    char *pbuffer;
+    for (name_id = 0; name_id < num_names; name_id++) {
+        node = list[name_id];
+        pbuffer = buffer_info;
+        pbuffer += sprintf(buffer_info, "%lu ", node->count);
+        i = 0;
+        while (node != root) {
+            name_reversed[i++] = node->letter;
+            node = node->parent;
+        }
+        while (i > 0) {
+            *(pbuffer++) = name_reversed[--i];
+        }
+        *(pbuffer++) = '\n';
+        *pbuffer = '\0';
+        fputs(buffer_info, file);
+    }
+
+    free(list);
+    fclose(file);
+
+    printf("Wrote most used names in %s\n", path);
+
+    return 0;
+}
+
+
+int8_t write_toggle_count(const char *path) {
     FILE *toggle_file = fopen(path, "w");
     if (toggle_file == NULL) {
         return 1;
@@ -321,7 +403,7 @@ int main(int argc, char* argv[]) {
         return 1; 
     }
 
-    TrieNode* root = make_trienode();
+    TrieNode* root = make_trienode(NULL, '\0');
     int8_t status_code;
     status_code = build_trie_from_path(root, argv[1]);
     if (status_code != 0) {
@@ -335,27 +417,13 @@ int main(int argc, char* argv[]) {
         return status_code;
     }
 
-    // write statistics
-    const char matches_path[] = "masks/most_used_names.txt";
-    FILE* matches_file = fopen(matches_path, "w");
-    if (matches_file == NULL) {
-        fprintf(stderr, "Couldn't open '%s' to write statistics\n", matches_path);
-    } else {
-        char prefix[MAX_LINE_LENGTH];
-        int32_t i;
-        for (i=0; i<MAX_LINE_LENGTH; i++) {
-            prefix[i] = 0;
-        }
-        write_statistics(root, matches_file, prefix, 0);
-        printf("Wrote most used names in %s\n", matches_path);
-    }
+    // write most used names statistics
+    status_code = write_names_count(root, "names/names.count");
 
-    write_toggle_statistics("masks/toggle_statistics.txt");
-
-    fclose(matches_file);
-
+    status_code |= write_toggle_count("masks/toggle_statistics.txt");
+    
     /* free the used memory */
     free_trienode(root);
 
-    return 0;
+    return status_code;
 }

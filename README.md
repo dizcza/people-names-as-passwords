@@ -11,7 +11,7 @@ The outcome of this research project will be eventually utilized in [hashcat-wpa
 ```
 $ sudo apt install konwert
 $ ./run.sh
-$ head -n10 masks/wpa/length/masks.stats
+$ head -n10 masks/masks.count
    4629 ||||||||
    2005 |||||||1
    1878 |||||123
@@ -34,24 +34,20 @@ The `run.sh` script needs to be run only once.
 
 ### Hashcat masks
 
-To create top 100 x 3 valid hashcat masks (lowercase, capitalize, and uppercase), run
+To convert top 100 'masks' into hashcat lowercase masks, run
 
 ```
-$ awk '{ if (FNR<=100) print $2}' masks/masks.count | awk '{
-      gsub("\\|", "l?"); print;
-      sub("l\\?", "u?", $1); print;
-      gsub("l\\?", "u?"); print
-  }' > masks/masks.hashcat
+$ awk 'FNR<=100 { gsub("\\|", "l?"); print $2 }' masks/masks.count > masks/masks.hashcat
 ```
 
 
 ### Generate probable passwords
 
-To avoid brute forcing with hashcat masks, we can generate new _probable_ passwords:
+To avoid brute forcing with hashcat masks, a better idea is to generate new _probable_ passwords:
 
 ```
-gcc -O1 -o generate src/generate.c
-./generate -m 1000 names/names.all masks/masks.count
+$ gcc -O1 -o generate src/generate.c
+$ ./generate -m 1000 names/names.all masks/masks.count
 ```
 
 The script above takes top `1000` masks from `masks/masks.count`, assuming you already did `./run.sh`, and prints new password candidates to the standard output. The output can be piped in `hashcat --stdin`. Password generation is fast - approximately 14M candidates per second.
