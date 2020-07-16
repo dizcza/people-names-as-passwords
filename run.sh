@@ -18,6 +18,6 @@ echo "Sorting masks by count"
 echo "  length mode"
 sort masks/masks.raw | uniq -c | sort -nr > masks/masks.count
 echo "  single-char mode"
-sed -E 's/\|+/|/' masks/masks.count | sort -k2 | awk -f bash/single-char.awk | sort -nr | column -t > masks/masks.count.single
+sed -E 's/\|+/|/' masks/masks.count | sort -k2 | awk -f bash/single-char.awk | sort -nr > masks/masks.count.single
 
 echo "Done."
