@@ -47,10 +47,10 @@ To avoid brute forcing with hashcat masks, a better idea is to generate new _pro
 
 ```
 $ gcc -O1 -o generate src/generate.c
-$ ./generate -m 1000 names/names.all masks/masks.count
+$ ./generate -n 1000 names/names.count masks/masks.count
 ```
 
-The script above takes top `1000` masks from `masks/masks.count`, assuming you already did `./run.sh`, and prints new password candidates to the standard output. The output can be piped in `hashcat --stdin`. Password generation is fast - approximately 14M candidates per second.
+The script above prints top `1000` password candidates to the standard output. The output can be piped in `hashcat --stdin`. Password generation is fast - approximately 14M candidates per second.
 
 
 ## In Depth

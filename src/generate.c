@@ -30,7 +30,7 @@ typedef struct MaskMode {
     uint8_t single_char_mode;
     uint8_t wpa_mode;
     uint8_t verbose;
-    int32_t top_masks;
+    uint64_t n_generate;
     int32_t toggle_id;
     uint8_t quantile;
 } MaskMode;
@@ -210,6 +210,9 @@ int8_t take_quantile(char ***name_lines, int32_t *num_names, const uint8_t quant
     char *pname = (*name_lines)[0];
     if (name_start_index(pname) == 0) {
         // plain name strings without counts
+        if (verbose) {
+            fprintf(stderr, "[INFO] Choosing all names.\n");
+        }
         return 0;
     }
     qsort(*name_lines, *num_names, sizeof(pname), compare_count);
@@ -247,12 +250,7 @@ int8_t take_quantile(char ***name_lines, int32_t *num_names, const uint8_t quant
         const float icdf = ((float) new_num_names) / *num_names;
         plot_cdf(hist, total_count, icdf);
     }
-     
-    if (new_num_names == *num_names) {
-        // do nothing
-        return 0;
-    }
-
+    
     char **new_name_lines = (char**) malloc(new_num_names * sizeof(char*));
     if (new_name_lines == NULL) {
         return 1;
@@ -315,7 +313,7 @@ int8_t process_first_line_of_lengths(const char **name_lines, const int32_t num_
 }
 
 
-int8_t generate_passwords(const char *line, const char **name_lines, const int32_t num_lines, const MaskMode *mask_mode) {
+int8_t generate_passwords(const char *line, const char **name_lines, const int32_t num_lines, MaskMode *mask_mode) {
     const size_t line_size = strlen(line);
     if (line_size == 1) {
         // only a new line char; skip
@@ -390,6 +388,9 @@ int8_t generate_passwords(const char *line, const char **name_lines, const int32
     int32_t lid, suffix_size, toggle_pos;
     int32_t name_size = strlen(name_lines[first_line]);
     for (lid = first_line; lid < stop_line; lid++) {
+        if (mask_mode->n_generate == 0){
+            break;
+        }
         if (mask_mode->single_char_mode) {
             name_size = strlen(name_lines[lid]);
         }
@@ -407,6 +408,8 @@ int8_t generate_passwords(const char *line, const char **name_lines, const int32
         }
 
         printf("%s", candidate);
+
+        mask_mode->n_generate--;
     }
 
     return 0;
@@ -442,29 +445,29 @@ int32_t get_column_offset(const char *line) {
 }
 
 
-int8_t generate_passwords_from_path(const char *masks_stats_path, const char **name_lines, const int32_t num_lines, const MaskMode *mask_mode) {
-    FILE *masks_stats_file = fopen(masks_stats_path, "r");
-    if (masks_stats_file == NULL) {
+int8_t generate_passwords_from_path(const char *path, const char **name_lines, const int32_t num_lines, MaskMode *mask_mode) {
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
         return 1;
     }
     char mask_line[MAX_LINE_LENGTH];
 
     int32_t lid = 0;
     int8_t status_code = 0;
-    while (fgets(mask_line, sizeof(mask_line), masks_stats_file)) {
-        if (mask_mode->top_masks != -1 && lid >= mask_mode->top_masks) {
-            break;
-        }
+    while (fgets(mask_line, sizeof(mask_line), file)) {
         status_code = generate_passwords(mask_line, name_lines, num_lines, mask_mode);
         if (status_code != 0) {
-            return status_code;
+            break;
+        }
+        if (mask_mode->n_generate == 0) {
+            break;
         }
         lid++;
     }
 
-    fclose(masks_stats_file);
+    fclose(file);
 
-    return 0;
+    return status_code;
 }
 
 
@@ -472,14 +475,13 @@ void MaskMode_PrintChosenOptions(const MaskMode *mask_mode, const char *masks_st
     if (mask_mode->verbose == 0) {
         return;
     }
-    if (mask_mode->top_masks != -1) {
-        fprintf(stderr, "[INFO] Choosing top %d masks from '%s'\n", mask_mode->top_masks, masks_stats_path);
-    } else {
-        fprintf(stderr, "[INFO] Choosing all masks from '%s'\n", masks_stats_path);
-    }
+
+    fprintf(stderr, "[INFO] Generating top %lu passwords\n", mask_mode->n_generate);
+
     if (mask_mode->single_char_mode) {
         fprintf(stderr, "[INFO] Enabling single-char mode. Make sure that all masks in '%s' are single-char masks\n", masks_stats_path);
     }
+
     if (mask_mode->wpa_mode) {
         fprintf(stderr, "[INFO] Enabling WPA mode\n");
     }
@@ -489,7 +491,7 @@ void MaskMode_PrintChosenOptions(const MaskMode *mask_mode, const char *masks_st
 /**
  * Generate password candidates from names and masks.
  *
- * Usage: ./generate [-s] [-w] [-m top_masks] /path/to/names.ascii /path/to/masks.stats
+ * Usage: ./generate [-s] [-w] [-n generate] [-T toggle-id] /path/to/names.ascii /path/to/masks.stats
  * Option flags:
  *   -s               Enable single char mode masks: each mask must constist of exactly 1 REPLACE_CHAR.
  *                    In single mode, the names of all lengths are substituted. Example:
@@ -497,11 +499,10 @@ void MaskMode_PrintChosenOptions(const MaskMode *mask_mode, const char *masks_st
  *
  *   -w               Enable WPA mode: print passwords that are at least 8 characters long.
  *
- *   -m <top-masks>   Choose only top 'm' masks from /path/to/masks.stats.
- *                    By default, all masks are chosen. Example:
- *                    ./generate -m 1000 ...
+ *   -n generate      Generate at most 'n' password candidates and stop.
+ *                    Default: 0
  *
- *   -T <toggle-id>   Toggle character by id.
+ *   -T toggle-id     Toggle character by id.
  */
 int main(int argc, char* argv[]) {
     opterr = 0;
@@ -511,12 +512,12 @@ int main(int argc, char* argv[]) {
         .single_char_mode=0U,
         .wpa_mode=0U,
         .verbose=0U,
-        .top_masks=-1,
+        .n_generate=0,
         .toggle_id=-1,
         .quantile=98
     };
 
-    while ((c = getopt(argc, argv, "swvm:T:q:")) != -1) {
+    while ((c = getopt(argc, argv, "swvn:T:q:")) != -1) {
         switch (c) {
             case 's':
                 mask_mode.single_char_mode = 1U;
@@ -527,8 +528,8 @@ int main(int argc, char* argv[]) {
             case 'v':
                 mask_mode.verbose++;
                 break;
-            case 'm':
-                mask_mode.top_masks = strtol(optarg, &ignore, 10);
+            case 'n':
+                mask_mode.n_generate = strtol(optarg, &ignore, 10);
                 break;
             case 'T':
                 mask_mode.toggle_id = strtol(optarg, &ignore, 10);
@@ -551,15 +552,24 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (argc - optind != 2) {
-        fprintf(stderr, "Usage: ./generate [-s] [-w] [-m top-masks] [-T toggle-id] /path/to/names.all /path/to/masks.stats\n");
+    char *names_file_path;
+    char *masks_file_path;
+    if (argc - optind == 0) {
+        names_file_path = "names/names.count";
+        if (mask_mode.single_char_mode) {
+            masks_file_path = "masks/masks.count.single";
+        } else {
+            masks_file_path = "masks/masks.count";
+        }
+    } else if (argc - optind != 2) {
+        fprintf(stderr, "Usage: ./generate [-s] [-w] [-n generate] [-T toggle-id] /path/to/names.count /path/to/masks.count\n");
         return 1;
+    } else {
+        names_file_path = argv[optind];
+        masks_file_path = argv[optind + 1];
     }
 
-    char *names_file_path = argv[optind];
-    char *masks_stats_path = argv[optind + 1];
-
-    MaskMode_PrintChosenOptions(&mask_mode, masks_stats_path);
+    MaskMode_PrintChosenOptions(&mask_mode, masks_file_path);
   
     int32_t num_lines, lid;
     char **name_lines;
@@ -579,7 +589,7 @@ int main(int argc, char* argv[]) {
         goto MAIN_CLEANUP;
     }
 
-    int8_t status_code = generate_passwords_from_path(masks_stats_path, (const char**) name_lines, num_lines, &mask_mode);
+    int8_t status_code = generate_passwords_from_path(masks_file_path, (const char**) name_lines, num_lines, &mask_mode);
 
 
 MAIN_CLEANUP:
