@@ -3,6 +3,10 @@ gender/
 ignored/
 wordlists/
 names/
+evaluation/*
+!evaluation/*.sh
+!evaluation/*.py
+!evaluation/evaluation.png
 masks*
 *.pyc
 *.o
